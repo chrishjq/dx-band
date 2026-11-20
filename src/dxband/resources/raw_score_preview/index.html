@@ -1,0 +1,1036 @@
+<!doctype html>
+<!-- SPDX-FileCopyrightText: 2026 DX Band -->
+<!-- SPDX-License-Identifier: GPL-3.0-only -->
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>原始节拍与曲谱预览</title>
+  <style>
+    :root { color-scheme: dark; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      --bg: #0b111b; --panel: #141e2b; --line: #314253; --text: #e8eef4;
+      --muted: #9caec0; --beat: #65c5e6; --sheet: #f4c36c; --play: #f46d7d; }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--bg); color: var(--text); }
+    main { max-width: 1480px; margin: auto; padding: 22px 28px 60px; }
+    header { display: flex; align-items: flex-start; justify-content: space-between; gap: 24px; }
+    h1 { font-size: 26px; margin: 0 0 8px; }
+    h2 { font-size: 18px; margin: 0 0 13px; }
+    p { margin: 0; color: var(--muted); line-height: 1.5; }
+    .sources { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+    .source { padding: 7px 10px; border: 1px solid var(--line); border-radius: 8px; font-size: 12px; color: var(--muted); }
+    .source.ok { color: #abecce; border-color: #38775c; }
+    .panel { margin-top: 18px; padding: 18px; border: 1px solid var(--line); border-radius: 14px; background: var(--panel); }
+    .transport { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+    button, select, input[type="number"] { border: 1px solid #456176; background: #203247; color: var(--text);
+      border-radius: 8px; padding: 8px 11px; font: inherit; cursor: pointer; }
+    button:hover, select:hover { border-color: #83b7d3; }
+    #play { min-width: 76px; background: #23516b; border-color: #4b9cc2; }
+    #clock { min-width: 112px; font-variant-numeric: tabular-nums; color: #fff; font-weight: 700; }
+    #audio { width: min(480px, 100%); height: 34px; }
+    .range { width: 100%; margin: 10px 0 0; accent-color: var(--play); cursor: pointer; }
+    .legend { display: flex; gap: 20px; flex-wrap: wrap; margin: 10px 0 0; color: var(--muted); font-size: 13px; }
+    .legend span::before { content: ""; display: inline-block; width: 11px; height: 11px;
+      margin-right: 6px; border-radius: 2px; background: currentColor; }
+    .legend .bt { color: var(--beat); } .legend .ss { color: var(--sheet); }
+    .legend .inst { color: #a5e8bd; }
+    .legend .candidate { color: #61dda0; }
+    .legend .cursor { color: var(--play); }
+    #librosaSummary { margin-top: 10px; color: #c9a7ef; font-size: 13px; }
+    #asrCollisions { display: block; color: #ff9a75; line-height: 1.4; }
+    .candidate-controls { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin: 10px 0; font-size: 13px; color: var(--muted); }
+    .candidate-controls input { width: 85px; }
+    .candidate-controls select { width: 80px; }
+    .canvas-wrap { position: relative; width: 100%; overflow: hidden; border-radius: 8px; background: #0e1722; }
+    canvas { display: block; width: 100%; cursor: crosshair; }
+    #detail { height: 600px; min-width: 1100px; }
+    .detail-wrap { overflow-x: auto; }
+    .hint { margin: 8px 0 13px; font-size: 13px; }
+    .metrics { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 9px; margin-top: 14px; }
+    .metric { border: 1px solid var(--line); border-radius: 9px; padding: 10px 12px; min-height: 69px; }
+    .metric small { display: block; color: var(--muted); font-size: 12px; margin-bottom: 6px; }
+    .metric strong { font-size: 18px; font-variant-numeric: tabular-nums; }
+    .decision { margin-top: 12px; padding: 12px 14px; border: 1px solid #346d58; border-radius: 9px;
+      background: #102b27; color: #c5efdb; line-height: 1.5; font-size: 13px; }
+    .decision strong { color: #81edb6; }
+    a { color: #8ed0ed; }
+    .download { display: flex; gap: 16px; flex-wrap: wrap; font-size: 13px; margin-top: 10px; }
+    #status { color: #f6bf79; margin-top: 10px; min-height: 18px; font-size: 13px; }
+    @media (max-width: 900px) { .metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+    @media (max-width: 600px) { main { padding: 14px; } header { display: block; }
+      .sources { justify-content: flex-start; margin-top: 12px; }
+      .metrics { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+<main>
+  <header>
+    <div><h1 id="title">节拍与小节分析预览</h1>
+      <p>绿色小节使用 Beat This! 拍点；蓝字保持 Fun-ASR 时间，青色纯人声音符向蓝字局部对齐，其他轨再依据橙色与青色人声的偏移校准。</p></div>
+    <div class="sources"><span class="source" id="beatSource">Beat This!：读取中</span>
+      <span class="source" id="sheetSource">SheetSage2：读取中</span>
+      <span class="source" id="vocalsOnlySource">纯人声转谱：读取中</span>
+      <span class="source" id="vocalPitchSource">声学音高：读取中</span>
+      <span class="source" id="asrSource">ASR：读取中</span>
+      <span class="source" id="funAsrSource">Fun-ASR：读取中</span>
+      <span class="source" id="librosaSource">librosa：读取中</span>
+      <span class="source" id="lyricsSource">歌词：读取中</span></div>
+  </header>
+
+  <section class="panel">
+    <div class="transport">
+      <button id="play" type="button">播放</button><button id="back" type="button">−5 秒</button>
+      <button id="forward" type="button">+5 秒</button><span id="clock">00:00 / 00:00</span>
+      <label>速度 <select id="rate"><option value="0.75">0.75×</option><option value="1" selected>1×</option>
+        <option value="1.25">1.25×</option></select></label>
+      <audio id="audio" src="/audio" controls preload="metadata"></audio>
+    </div>
+    <input id="seek" class="range" type="range" min="0" max="1" step="0.01" value="0" aria-label="播放位置">
+    <div id="status"></div>
+  </section>
+
+  <section class="panel"><h2>播放位置附近 · 16 秒</h2>
+    <p class="hint">Beat This! 决定小节。蓝色 Fun-ASR 字保持原始时间；青色纯人声音符按顺序与蓝字匹配后局部校准，淡青色细线保留校准前的位置。每个音符最多对应一个字。librosa 拍点、起音和人声基频仅供对照，不代表小节线或离散音符。</p>
+    <div class="candidate-controls">
+      <label>BPM 参考值 <input id="songBpm" type="number" min="20" max="400" step="1" placeholder="可留空"></label>
+      <label>拍号 <select id="songMeter"><option>4/4</option><option>3/4</option><option>2/4</option><option>6/8</option></select></label>
+      <span>BPM 参考值同时比较一半和两倍。橙色虚线表示 SheetSage2 在 Beat This! 缺失重拍时辅助补线。</span>
+    </div>
+    <div class="decision" id="analysisDecision">等待模型数据……</div>
+    <div class="canvas-wrap detail-wrap"><canvas id="detail"></canvas></div>
+    <div class="legend"><span class="candidate">绿色：Beat This! 主导的小节线</span><span style="color:#c799ff">紫色：librosa 拍点</span><span style="color:#f4c36c">橙色：整曲人声原始音符</span><span style="color:#63e5d2">青色：蓝字校准后的纯人声音符</span><span style="color:#89a9c2">灰蓝：校准后的其他轨</span><span style="color:#468c8b">淡色细线：原始音符位置</span><span style="color:#7fb6ff">蓝色：Fun-ASR 原始字时间</span><span style="color:#f49bba">粉色：librosa 人声基频</span><span id="candidateTimes">分析中</span></div>
+    <div id="librosaSummary" hidden></div>
+    <div class="legend" id="unmatchedFun" aria-live="polite"></div>
+    <div class="legend" id="otherAlignment" aria-live="polite"></div>
+    <div class="metrics">
+      <div class="metric"><small>重构小节</small><strong id="currentBar">—</strong></div>
+      <div class="metric"><small>当前和弦</small><strong id="currentChord">—</strong></div>
+      <div class="metric"><small>LRC 歌词行</small><strong id="currentLine">—</strong></div>
+      <div class="metric"><small>Fun-ASR 字</small><strong id="currentAsr">—</strong></div>
+      <div class="metric"><small>对应青色音符</small><strong id="currentWord">—</strong></div>
+    </div>
+    <div class="download"><a id="beatRawLink" href="/raw/beat_this/beat_this.json" target="_blank">查看 Beat This! 原始 JSON</a>
+      <a id="sheetRawLink" href="/raw/sheetsage2/events.json" target="_blank">查看 SheetSage2 events.json</a>
+      <a id="vocalsOnlyRawLink" href="/raw/sheetsage2_vocals_only/events.json" target="_blank" hidden>查看纯人声版 events.json</a>
+      <a id="vocalPitchRawLink" href="/raw/vocal_pitch/notes.json" target="_blank" hidden>查看独立声学音符 JSON</a>
+      <a id="instrumentalRawLink" href="/raw/sheetsage2_instrumental/events.json" target="_blank" hidden>查看伴奏版 events.json</a>
+      <a id="lyricsRawLink" href="/raw/lyrics.json" target="_blank" hidden>查看本次对齐歌词</a>
+      <a id="asrRawLink" href="/raw/asr.json" target="_blank" hidden>查看 ASR 原始 JSON</a>
+      <a id="funAsrRawLink" href="/raw/fun_asr.json" target="_blank" hidden>查看 Fun-ASR 原始 JSON</a>
+      <a id="librosaRawLink" href="/raw/librosa/analysis.json" target="_blank" hidden>查看 librosa 分析 JSON</a>
+      <a id="lrcRawLink" href="/raw/lyrics.lrc" target="_blank" hidden>查看原始 LRC</a></div>
+  </section>
+
+</main>
+<script>
+  const $ = (id) => document.getElementById(id);
+  const audio = $('audio');
+  const state = {beat: null, sheet: null, instrumentalSheet: null, vocalsOnlySheet: null, vocalPitch: null, librosa: null,
+    vocalsOnlyEvents: [], alignedLyrics: null, rawAsr: null, funAsr: null,
+    asrTokens: [], funAsrTokens: [], alignedFunAsrTokens: [], unmatchedFunAsrTokens: [],
+    vocalNotes: [], alignedVocalNotes: [], alignedOtherNotes: [], otherBarStats: [], otherAnchors: [], otherGapStats: [],
+    acousticNotes: [], lrcLines: [], lyricWords: [],
+    sheetEvents: [], keyChanges: [],
+    beatBars: [], candidateBars: [], beatGrid: [], tempoFit: null,
+    duration: 0};
+  const escapeHtml = (value) => String(value ?? '').replace(/[&<>"']/g, (char) =>
+    ({'&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;'}[char]));
+  const seconds = (value) => Number.isFinite(value) ? value.toFixed(2) + 's' : '—';
+  const clock = (value) => {
+    const whole = Math.floor(Math.max(0, value || 0));
+    return `${String(Math.floor(whole / 60)).padStart(2, '0')}:${String(whole % 60).padStart(2, '0')}`;
+  };
+  const nearest = (values, time) => {
+    if (!values.length) return null;
+    let low = 0, high = values.length;
+    while (low < high) { const mid = (low + high) >> 1; if (values[mid] < time) low = mid + 1; else high = mid; }
+    return [values[Math.max(0, low - 1)], values[Math.min(values.length - 1, low)]]
+      .reduce((best, item) => Math.abs(item - time) < Math.abs(best - time) ? item : best);
+  };
+  const barAt = (bars, time) => {
+    if (!bars.length || time < bars[0].start) return -1;
+    let low = 0, high = bars.length;
+    while (low < high) { const mid = (low + high) >> 1; if (bars[mid].start <= time) low = mid + 1; else high = mid; }
+    return Math.min(bars.length - 1, low - 1);
+  };
+  const midiName = (pitch) => {
+    const names = ['C','C#','D','Eb','E','F','F#','G','Ab','A','Bb','B'];
+    const value = Number(pitch);
+    return Number.isFinite(value) ? `${names[((value % 12) + 12) % 12]}${Math.floor(value / 12) - 1}` : String(pitch);
+  };
+  const pitchClass = (name) => {
+    const match = /^([A-G])([#b]?)$/.exec(name || '');
+    if (!match) return null;
+    const root = {C:0,D:2,E:4,F:5,G:7,A:9,B:11}[match[1]];
+    return (root + (match[2] === '#' ? 1 : match[2] === 'b' ? -1 : 0) + 12) % 12;
+  };
+  const parseKey = (label) => {
+    const [root, mode] = String(label || '').split(':');
+    const tonic = pitchClass(root);
+    if (tonic === null) return null;
+    const reference = 60 + (tonic + (mode?.startsWith('min') ? 3 : 0)) % 12;
+    return {label, reference};
+  };
+  const keyAt = (time) => {
+    let current = state.keyChanges[0]?.key || null;
+    for (const change of state.keyChanges) {
+      if (change.time > time) break;
+      current = change.key;
+    }
+    return current;
+  };
+  const jianpuPitch = (pitch, key) => {
+    if (!key || !Number.isFinite(Number(pitch))) return null;
+    const difference = Number(pitch) - key.reference;
+    const interval = ((difference % 12) + 12) % 12;
+    const labels = ['1','♭2','2','♭3','3','4','♯4','5','♯5','6','♭7','7'];
+    return {label: labels[interval], octave: Math.floor(difference / 12)};
+  };
+  const eventTime = (event) => Number(event.time);
+  const getNotes = (event) => Array.isArray(event.values?.melody) ? event.values.melody : [];
+  const parseLrc = (source) => {
+    const lines = [];
+    for (const row of String(source || '').split(/\r?\n/)) {
+      const match = /\[(\d+):(\d+(?:[.:]\d+)?)\]/.exec(row);
+      if (!match) continue;
+      const text = row.replace(/\[\d+:\d+(?:[.:]\d+)?\]/g, '').trim();
+      if (!text || /^(词|曲|编曲|制作人?|演唱|作词|作曲)[:：]/.test(text) ||
+          /^\S+\s*\([^)]*\)\s*[-–—]\s*\S+/.test(text)) continue;
+      lines.push({time: Number(match[1]) * 60 + Number(match[2].replace(':', '.')), text});
+    }
+    state.lrcLines = lines.sort((a, b) => a.time - b.time);
+  };
+  const parseAlignedLyrics = (raw) => {
+    state.alignedLyrics = raw;
+    state.lyricWords = (raw?.lines || []).flatMap(line => (line.words || []).map((word, index) => ({
+      ...word, lineId: line.id, lineText: line.text,
+      lineStart: index === 0 && Boolean(raw?.peak_acoustic_lines),
+      time: Number(word.start_ms) / 1000, end: Number(word.end_ms) / 1000,
+    }))).filter(word => Number.isFinite(word.time) && Number.isFinite(word.end));
+  };
+  const parseRawAsr = (raw) => {
+    state.rawAsr = raw;
+    state.asrTokens = (raw?.tokens || []).map(token => ({
+      ...token, time: Number(token.start_s), end: Number(token.end_s),
+    })).filter(token => Number.isFinite(token.time) && Number.isFinite(token.end))
+      .sort((a, b) => a.time - b.time);
+  };
+  const parseFunAsr = (raw) => {
+    state.funAsr = raw;
+    state.funAsrTokens = (raw?.tokens || []).map(token => ({
+      ...token, time: Number(token.start_s), end: Number(token.end_s),
+    })).filter(token => Number.isFinite(token.time) && Number.isFinite(token.end))
+      .sort((a, b) => a.time - b.time);
+  };
+  const alignFunAsrToVocalNotes = () => {
+    state.vocalNotes = state.vocalsOnlyEvents.flatMap(event => getNotes(event)
+      .filter(note => Number(note.track) === 0 && Number.isFinite(Number(note.pitch)))
+      .map(note => ({time: eventTime(event), end: Number(note.end_time), pitch: Number(note.pitch)})))
+      .sort((a, b) => a.time - b.time || a.pitch - b.pitch);
+    const tokens = state.funAsrTokens;
+    const notes = state.vocalNotes;
+    const n = tokens.length, m = notes.length;
+    const skipCharacter = 1.1, skipNote = .18, maxDistance = .75;
+    let previous = new Float64Array(m + 1);
+    for (let j = 1; j <= m; j++) previous[j] = previous[j - 1] + skipNote;
+    const actions = Array.from({length: n + 1}, () => new Uint8Array(m + 1));
+    for (let i = 1; i <= n; i++) {
+      const current = new Float64Array(m + 1);
+      current[0] = previous[0] + skipCharacter;
+      actions[i][0] = 1;
+      for (let j = 1; j <= m; j++) {
+        let best = previous[j] + skipCharacter, action = 1;
+        const unusedNote = current[j - 1] + skipNote;
+        if (unusedNote < best) { best = unusedNote; action = 2; }
+        const distance = Math.abs(tokens[i - 1].time - notes[j - 1].time);
+        const paired = distance <= maxDistance ? previous[j - 1] + distance : Infinity;
+        if (paired <= best) { best = paired; action = 3; }
+        current[j] = best; actions[i][j] = action;
+      }
+      previous = current;
+    }
+    const aligned = [], unmatched = [], anchors = [];
+    let i = n, j = m;
+    while (i > 0) {
+      const action = actions[i][j];
+      if (action === 3) {
+        const note = notes[j - 1];
+        aligned.push({...tokens[i - 1], displayTime: tokens[i - 1].time, noteIndex: j - 1,
+          notePitch: note.pitch, offset: note.time - tokens[i - 1].time});
+        anchors.push({index: j - 1, rawTime: note.time, targetTime: tokens[i - 1].time});
+        i--; j--;
+      } else if (action === 2) j--;
+      else { unmatched.push(tokens[i - 1]); i--; }
+    }
+    state.alignedFunAsrTokens = aligned.reverse();
+    state.unmatchedFunAsrTokens = unmatched.reverse();
+    anchors.reverse();
+    // Warp only near matched syllables. The ASR times remain untouched, while the
+    // original SheetSage2 note times stay available in state.vocalNotes.
+    let right = 0;
+    const alignedStarts = notes.map((note, index) => {
+      while (right < anchors.length && anchors[right].index < index) right++;
+      const next = anchors[right], prior = anchors[right - 1];
+      if (next?.index === index) return next.targetTime;
+      if (prior && next && next.rawTime > prior.rawTime && next.rawTime - prior.rawTime <= 3) {
+        const fraction = (note.time - prior.rawTime) / (next.rawTime - prior.rawTime);
+        return note.time + (1 - fraction) * (prior.targetTime - prior.rawTime) +
+          fraction * (next.targetTime - next.rawTime);
+      }
+      const closest = [prior, next].filter(Boolean)
+        .sort((a, b) => Math.abs(note.time - a.rawTime) - Math.abs(note.time - b.rawTime))[0];
+      return closest && Math.abs(note.time - closest.rawTime) <= 1.2
+        ? note.time + closest.targetTime - closest.rawTime : note.time;
+    });
+    state.alignedVocalNotes = notes.map((note, index) => {
+      const start = alignedStarts[index];
+      const rawEnd = Number.isFinite(note.end) ? note.end : note.time + .2;
+      const nextStart = alignedStarts[index + 1];
+      const shiftedEnd = start + Math.max(.05, rawEnd - note.time);
+      return {time: start, end: Number.isFinite(nextStart) && nextStart > start
+        ? Math.min(shiftedEnd, nextStart) : shiftedEnd, pitch: note.pitch,
+        rawTime: note.time, rawEnd};
+    });
+  };
+  const parseSheet = (raw) => {
+    state.sheet = raw;
+    state.sheetEvents = (raw.events || []).filter((event) => Number.isFinite(eventTime(event)))
+      .slice().sort((a, b) => eventTime(a) - eventTime(b));
+    state.keyChanges = state.sheetEvents.filter((event) => parseKey(event.values?.key))
+      .map((event) => ({time: eventTime(event), key: parseKey(event.values.key)}));
+  };
+  const parseBeat = (raw) => {
+    state.beat = raw;
+    const downbeats = (raw.downbeats_s || []).map(Number).filter(Number.isFinite).sort((a,b) => a-b);
+    const beats = (raw.beats_s || []).map(Number).filter(Number.isFinite).sort((a,b) => a-b);
+    state.beat.downbeats_s = downbeats; state.beat.beats_s = beats;
+    state.beatBars = downbeats.map((start, index) => {
+      const end = downbeats[index + 1] || Math.max(start + 0.01, state.duration || beats.at(-1) || 0);
+      return {index, start, end, beats: beats.filter((time) => time >= start && time < end)};
+    });
+  };
+  const mean = (values) => values.reduce((total, value) => total + value, 0) / values.length;
+  const trimmedMean = (values) => {
+    const sorted = values.slice().sort((a, b) => a - b);
+    const trim = Math.floor(sorted.length * 0.1);
+    return mean(sorted.slice(trim, sorted.length - trim));
+  };
+  const meterBeats = () => {
+    const [top, bottom] = $('songMeter').value.split('/').map(Number);
+    return top * 4 / bottom;
+  };
+  const chooseTempo = () => {
+    const beats = state.beat?.beats_s || [];
+    const gaps = beats.slice(1).map((time, index) => time - beats[index])
+      .filter(gap => gap > 0.18 && gap < 3.2);
+    if (gaps.length < 6) return null;
+    const bpmHint = Number($('songBpm').value);
+    const ordered = gaps.slice().sort((a, b) => a - b);
+    const fastGap = trimmedMean(ordered.slice(0, Math.max(6, Math.ceil(ordered.length * 0.6))));
+    const observedBpm = 60 / fastGap;
+    const seeds = [observedBpm / 2, observedBpm, observedBpm * 2];
+    if (Number.isFinite(bpmHint) && bpmHint > 0) seeds.push(bpmHint / 2, bpmHint, bpmHint * 2);
+    const multiples = [0.5, 1, 2, 3, 4, 6, 8];
+    const match = (gap, period) => multiples.reduce((best, count) =>
+      Math.abs(gap - count * period) < Math.abs(gap - best * period) ? count : best);
+    const candidates = seeds.filter(bpm => bpm >= 35 && bpm <= 240).map(seed => {
+      let period = 60 / seed;
+      for (let iteration = 0; iteration < 2; iteration++) {
+        const fitted = gaps.map(gap => {
+          const count = match(gap, period);
+          return Math.abs(gap - count * period) < period * 0.24 ? gap / count : null;
+        }).filter(value => value !== null);
+        if (fitted.length >= 6) period = trimmedMean(fitted);
+      }
+      const score = mean(gaps.map(gap => {
+        const count = match(gap, period);
+        const error = Math.min(0.5, Math.abs(gap - count * period) / period);
+        const missing = count > 1 ? 0.07 * (count - 1) : 0;
+        const extra = count < 1 ? 0.35 : 0;
+        return error * error + missing + extra;
+      })) + (60 / period < 55 || 60 / period > 190 ? 0.06 : 0);
+      return {bpm: 60 / period, period, score};
+    }).sort((a, b) => a.score - b.score);
+    const distinct = candidates.filter((item, index) =>
+      !candidates.slice(0, index).some(previous => Math.abs(Math.log2(item.bpm / previous.bpm)) < 0.035));
+    return distinct.length ? {best: distinct[0], alternatives: distinct.slice(1, 4)} : null;
+  };
+  const buildBeatGrid = (period) => {
+    const raw = state.beat?.beats_s || [];
+    if (!raw.length) return [];
+    state.tempoFit.gridMethod = '保留原始拍点并局部补漏';
+    const grid = [{time: raw[0], observed: true}];
+    for (const time of raw.slice(1)) {
+      const previous = grid.at(-1).time;
+      const gap = time - previous;
+      if (gap < period * 0.45) continue;
+      const steps = Math.max(1, Math.round(gap / period));
+      for (let step = 1; step < steps; step++) {
+        grid.push({time: previous + gap * step / steps, observed: false});
+      }
+      grid.push({time, observed: true});
+    }
+    const limit = Math.min(state.duration || Infinity, raw.at(-1) + 4 * period);
+    while (grid.at(-1).time + period < limit) {
+      grid.push({time: grid.at(-1).time + period, observed: false});
+    }
+    return grid;
+  };
+  const nearestBeatIndex = (times, time) => {
+    let low = 0, high = times.length;
+    while (low < high) {
+      const mid = (low + high) >> 1;
+      if (times[mid] < time) low = mid + 1; else high = mid;
+    }
+    return low === 0 ? 0 : low === times.length ? times.length - 1 :
+      Math.abs(times[low] - time) < Math.abs(times[low - 1] - time) ? low : low - 1;
+  };
+  const buildCandidateBars = () => {
+    state.candidateBars = [];
+    state.beatGrid = [];
+    state.tempoFit = chooseTempo();
+    if (!state.tempoFit) return;
+    const {period} = state.tempoFit.best;
+    state.beatGrid = buildBeatGrid(period);
+    const times = state.beatGrid.map(beat => beat.time);
+    const size = meterBeats();
+    if (!times.length || !Number.isInteger(size) || size < 1) return;
+    const rawDownbeats = state.beat?.downbeats_s || [];
+    const sheetDownbeats = state.sheetEvents.filter(event =>
+      Number(event.values?.rhythm?.eighth_position) === 0 && event.values?.rhythm)
+      .map(eventTime).filter(Number.isFinite);
+    const supported = times.map(time => {
+      const beat = nearest(rawDownbeats, time), sheet = nearest(sheetDownbeats, time);
+      return {beat: beat !== null && Math.abs(beat - time) <= period * .30,
+        sheet: sheet !== null && Math.abs(sheet - time) <= period * .30};
+    });
+    const scores = Array(times.length).fill(-Infinity), previous = Array(times.length).fill(-1);
+    scores[0] = 0;
+    for (let index = 1; index < times.length; index++) {
+      const here = supported[index];
+      // SheetSage2 only adds evidence when Beat This! lacks a downbeat.
+      const reward = here.beat ? 1 : here.sheet ? .5 : 0;
+      for (const [length, penalty] of [[size, 0], [2, 1.8], [size - 1, 2.8], [size + 1, 2.8]]) {
+        const before = index - length;
+        if (length < 1 || before < 0 || scores[before] === -Infinity) continue;
+        if (length !== size && !(here.sheet && (here.beat || supported[before].beat) &&
+            Math.abs(times[index] - times[before] - length * period) <= period * .45)) continue;
+        const value = scores[before] + reward - penalty;
+        if (value > scores[index]) { scores[index] = value; previous[index] = before; }
+      }
+    }
+    const noteEnds = state.sheetEvents.flatMap(event => getNotes(event).map(note => Number(note.end_time)))
+      .filter(Number.isFinite);
+    const scoreEnd = Math.min(state.duration || Infinity,
+      noteEnds.length ? Math.max(...noteEnds) : times.at(-1) + period);
+    const possible = times.map((time, index) => ({time, index})).filter(({time, index}) =>
+      scoreEnd > time && scoreEnd - time <= period * (size + .35) && scores[index] > -Infinity);
+    if (!possible.length) return;
+    const last = possible.reduce((best, item) =>
+      scores[item.index] - Math.abs((scoreEnd - item.time) / period - size) * .3 >
+      scores[best.index] - Math.abs((scoreEnd - best.time) / period - size) * .3 ? item : best).index;
+    const indices = [last];
+    while (indices.at(-1) > 0) indices.push(previous[indices.at(-1)]);
+    indices.reverse();
+    state.candidateBars = indices.map((beatIndex, index) => {
+      const next = indices[index + 1];
+      const start = times[beatIndex], end = next === undefined ? scoreEnd : times[next];
+      const beatSupport = supported[beatIndex].beat;
+      const source = beatSupport ? 'beat' : supported[beatIndex].sheet ? 'sheet' : 'inferred';
+      const beats = state.beatGrid.slice(beatIndex, next === undefined ? beatIndex + size : next)
+        .filter(beat => beat.time < end);
+      return {index, time: start, start, end, beats, beatSupport, source,
+        uncertain: !beatSupport};
+    });
+  };
+  const median = (values) => {
+    const sorted = values.slice().sort((a, b) => a - b);
+    return sorted.length % 2 ? sorted[(sorted.length - 1) / 2] :
+      (sorted[sorted.length / 2 - 1] + sorted[sorted.length / 2]) / 2;
+  };
+  const matchVocalNotes = (source, target) => {
+    const rows = source.length, columns = target.length, skip = .5;
+    let previous = new Float64Array(columns + 1);
+    for (let j = 1; j <= columns; j++) previous[j] = j * skip;
+    const actions = Array.from({length: rows + 1}, () => new Uint8Array(columns + 1));
+    for (let i = 1; i <= rows; i++) {
+      const current = new Float64Array(columns + 1);
+      current[0] = i * skip; actions[i][0] = 1;
+      for (let j = 1; j <= columns; j++) {
+        let best = previous[j] + skip, action = 1;
+        if (current[j - 1] + skip < best) { best = current[j - 1] + skip; action = 2; }
+        const distance = Math.abs(source[i - 1].time - target[j - 1].time);
+        const pair = source[i - 1].pitch === target[j - 1].pitch && distance <= .9
+          ? previous[j - 1] + distance : Infinity;
+        if (pair <= best) { best = pair; action = 3; }
+        current[j] = best; actions[i][j] = action;
+      }
+      previous = current;
+    }
+    const pairs = [];
+    let i = rows, j = columns;
+    while (i && j) {
+      const action = actions[i][j];
+      if (action === 3) { pairs.push([source[i - 1], target[j - 1]]); i--; j--; }
+      else if (action === 2) j--;
+      else i--;
+    }
+    return pairs.reverse();
+  };
+  const vocalPhrases = (notes) => {
+    const phrases = [];
+    for (const note of notes) {
+      const previous = phrases.at(-1);
+      if (!previous || note.time - previous.end > .9) {
+        phrases.push({start: note.time, end: note.end, notes: [note]});
+      } else {
+        previous.notes.push(note);
+        previous.end = Math.max(previous.end, note.end);
+      }
+    }
+    return phrases;
+  };
+  const matchVocalPhrases = (orange, cyan) => {
+    const matches = new Map();
+    let previousCyan = -1;
+    orange.forEach((phrase, index) => {
+      const candidates = cyan.map((target, targetIndex) => {
+        const countRatio = target.notes.length / phrase.notes.length;
+        const prefix = Math.min(3, phrase.notes.length, target.notes.length);
+        const pitchMatches = Array.from({length: prefix}, (_, i) =>
+          phrase.notes[i].pitch === target.notes[i].pitch).filter(Boolean).length;
+        if (targetIndex <= previousCyan || Math.abs(target.start - phrase.start) > 1.6 ||
+            countRatio < .7 || countRatio > 1.4 || pitchMatches < Math.min(2, prefix)) return null;
+        return {targetIndex, score: Math.abs(target.start - phrase.start) +
+          .08 * Math.abs(target.notes.length - phrase.notes.length) +
+          .05 * Math.abs(target.end - phrase.end)};
+      }).filter(Boolean).sort((a, b) => a.score - b.score);
+      if (candidates.length) {
+        previousCyan = candidates[0].targetIndex;
+        matches.set(index, cyan[previousCyan]);
+      }
+    });
+    return matches;
+  };
+  const alignOtherTrackToVocals = () => {
+    const fullNotes = state.sheetEvents.flatMap(event => getNotes(event)
+      .filter(note => Number.isFinite(Number(note.pitch)))
+      .map(note => ({time: eventTime(event), end: Number(note.end_time),
+        pitch: Number(note.pitch), track: Number(note.track)})));
+    const fullVocals = fullNotes.filter(note => note.track === 0);
+    const otherNotes = fullNotes.filter(note => note.track === 1);
+    const cyan = state.alignedVocalNotes;
+    state.otherBarStats = state.candidateBars.map(bar => {
+      const orange = fullVocals.filter(note => note.time >= bar.start && note.time < bar.end);
+      const corrected = cyan.filter(note => note.time >= bar.start && note.time < bar.end);
+      const offsets = matchVocalNotes(orange, corrected)
+        .map(([from, to]) => to.time - from.time);
+      const center = offsets.length ? median(offsets) : null;
+      const inliers = offsets.filter(offset => Math.abs(offset - center) <= .22);
+      const count = Math.max(orange.length, corrected.length);
+      const refined = inliers.length ? median(inliers) : null;
+      const spread = inliers.length ? median(inliers.map(offset => Math.abs(offset - refined))) : Infinity;
+      const reliable = orange.length >= 2 && corrected.length >= 2 &&
+        Math.abs(orange.length - corrected.length) <= Math.max(2, Math.ceil(count * .35)) &&
+        inliers.length >= Math.max(2, Math.ceil(count * .55)) && spread <= .12 &&
+        Math.abs(refined) <= .75;
+      return {start: bar.start, end: bar.end, time: (bar.start + bar.end) / 2,
+        orangeCount: orange.length, cyanCount: corrected.length,
+        matchedCount: inliers.length, offset: reliable ? refined : null, reliable};
+    });
+    const anchors = state.otherBarStats.filter(bar => bar.reliable);
+    state.otherAnchors = anchors;
+    const orangePhrases = vocalPhrases(fullVocals);
+    // Use the raw solo-vocal rests to identify phrase boundaries. ASR correction
+    // can shorten a rest, but each note still has the same index in the two layers.
+    const cyanPhrases = vocalPhrases(state.vocalNotes.map((note, index) => ({
+      ...note, alignedTime: cyan[index]?.time, alignedEnd: cyan[index]?.end,
+    })));
+    const phraseMatches = matchVocalPhrases(orangePhrases, cyanPhrases);
+    state.otherGapStats = orangePhrases.slice(1).map((next, index) => {
+      const prior = orangePhrases[index];
+      const from = phraseMatches.get(index), to = phraseMatches.get(index + 1);
+      if (!from || !to) return null;
+      const rawStart = prior.end, rawEnd = next.start;
+      const targetStart = from.notes.at(-1).alignedEnd;
+      const targetEnd = to.notes[0].alignedTime;
+      const rawLength = rawEnd - rawStart, targetLength = targetEnd - targetStart;
+      const ratio = targetLength / rawLength;
+      const count = otherNotes.filter(note => note.time >= rawStart && note.time < rawEnd).length;
+      return rawLength > .45 && targetLength > .3 && ratio >= .7 && ratio <= 1.4 && count
+        ? {rawStart, rawEnd, targetStart, targetEnd, ratio, count} : null;
+    }).filter(Boolean);
+    const shiftAt = (time) => {
+      if (!anchors.length) return 0;
+      let right = 0;
+      while (right < anchors.length && anchors[right].time < time) right++;
+      const next = anchors[right], prior = anchors[right - 1];
+      if (prior && next) {
+        const fraction = (time - prior.time) / (next.time - prior.time);
+        return prior.offset + fraction * (next.offset - prior.offset);
+      }
+      return (prior || next).offset;
+    };
+    state.alignedOtherNotes = otherNotes.map(note => {
+      const gap = state.otherGapStats.find(item =>
+        note.time >= item.rawStart && note.time < item.rawEnd);
+      if (gap) {
+        const mapTime = time => gap.targetStart + (time - gap.rawStart) * gap.ratio;
+        const time = mapTime(note.time);
+        const rawEnd = Number.isFinite(note.end) ? note.end : note.time + .2;
+        return {...note, time, end: mapTime(rawEnd), rawTime: note.time,
+          rawEnd, offset: time - note.time, method: 'phrase-gap', gap};
+      }
+      const offset = shiftAt(note.time);
+      return {...note, time: note.time + offset,
+        end: (Number.isFinite(note.end) ? note.end : note.time + .2) + offset,
+        rawTime: note.time, rawEnd: note.end, offset, method: 'bar-offset'};
+    });
+  };
+  const load = async () => {
+    try {
+      const embeddedNode = $('embedded-preview');
+      const embedded = embeddedNode ? JSON.parse(embeddedNode.textContent) : null;
+      const meta = embedded?.meta || await fetch('/api/meta').then((response) => response.json());
+      $('title').textContent = `${meta.title} · 节拍与小节分析预览`;
+      document.title = `${meta.title} · 节拍与小节分析预览`;
+      $('songBpm').value = meta.bpm || '';
+      $('songMeter').value = meta.meter || '4/4';
+      const outputs = embedded ? [
+        {status: 'fulfilled', value: embedded.beat}, {status: 'fulfilled', value: embedded.sheet},
+        {status: 'fulfilled', value: embedded.instrumental_sheet},
+        {status: 'fulfilled', value: embedded.aligned_lyrics},
+        {status: 'fulfilled', value: embedded.source_lrc},
+        {status: 'fulfilled', value: embedded.raw_asr},
+        {status: 'fulfilled', value: embedded.vocals_only_sheet},
+        {status: 'fulfilled', value: embedded.fun_asr},
+        {status: 'fulfilled', value: embedded.vocal_pitch},
+        {status: 'fulfilled', value: embedded.librosa},
+      ] : await Promise.allSettled([
+        fetch('/raw/beat_this/beat_this.json').then((response) => { if (!response.ok) throw Error('未找到'); return response.json(); }),
+        fetch('/raw/sheetsage2/events.json').then((response) => { if (!response.ok) throw Error('未找到'); return response.json(); }),
+        meta.sources?.sheetsage2_instrumental
+          ? fetch('/raw/sheetsage2_instrumental/events.json').then((response) => { if (!response.ok) throw Error('未找到'); return response.json(); })
+          : Promise.resolve(null),
+        meta.sources?.lyrics_json
+          ? fetch('/raw/lyrics.json').then((response) => { if (!response.ok) throw Error('未找到'); return response.json(); })
+          : Promise.resolve(null),
+        meta.sources?.lyrics_lrc
+          ? fetch('/raw/lyrics.lrc').then((response) => { if (!response.ok) throw Error('未找到'); return response.text(); })
+          : Promise.resolve(null),
+        meta.sources?.asr_json
+          ? fetch('/raw/asr.json').then((response) => { if (!response.ok) throw Error('未找到'); return response.json(); })
+          : Promise.resolve(null),
+        meta.sources?.sheetsage2_vocals_only
+          ? fetch('/raw/sheetsage2_vocals_only/events.json').then((response) => { if (!response.ok) throw Error('未找到'); return response.json(); })
+          : Promise.resolve(null),
+        meta.sources?.fun_asr_json
+          ? fetch('/raw/fun_asr.json').then((response) => { if (!response.ok) throw Error('未找到'); return response.json(); })
+          : Promise.resolve(null),
+        meta.sources?.vocal_pitch
+          ? fetch('/raw/vocal_pitch/notes.json').then((response) => { if (!response.ok) throw Error('未找到'); return response.json(); })
+          : Promise.resolve(null),
+        meta.sources?.librosa
+          ? fetch('/raw/librosa/analysis.json').then((response) => { if (!response.ok) throw Error('未找到'); return response.json(); })
+          : Promise.resolve(null),
+      ]);
+      if (embedded) {
+        for (const [id, raw] of [['beatRawLink', embedded.beat], ['sheetRawLink', embedded.sheet],
+          ['instrumentalRawLink', embedded.instrumental_sheet],
+          ['vocalsOnlyRawLink', embedded.vocals_only_sheet],
+          ['vocalPitchRawLink', embedded.vocal_pitch], ['librosaRawLink', embedded.librosa]]) {
+          if (!raw) continue;
+          $(id).href = URL.createObjectURL(new Blob([JSON.stringify(raw, null, 2)], {type: 'application/json'}));
+          $(id).download = id === 'beatRawLink' ? 'beat_this.json' :
+            id === 'instrumentalRawLink' ? 'instrumental_events.json' :
+              id === 'vocalsOnlyRawLink' ? 'vocals_only_events.json' :
+                id === 'vocalPitchRawLink' ? 'acoustic_vocal_notes.json' :
+                  id === 'librosaRawLink' ? 'librosa_analysis.json' : 'events.json';
+          $(id).removeAttribute('target');
+        }
+        for (const [id, raw, type, filename] of [
+          ['lyricsRawLink', embedded.aligned_lyrics, 'application/json', 'lyric_alignment_preview.json'],
+          ['asrRawLink', embedded.raw_asr, 'application/json', 'raw_asr.json'],
+          ['funAsrRawLink', embedded.fun_asr, 'application/json', 'fun_asr.json'],
+          ['lrcRawLink', embedded.source_lrc, 'text/plain', 'source.lrc'],
+        ]) {
+          if (!raw) continue;
+          $(id).href = URL.createObjectURL(new Blob([
+            typeof raw === 'string' ? raw : JSON.stringify(raw, null, 2),
+          ], {type}));
+          $(id).download = filename; $(id).removeAttribute('target');
+        }
+      }
+      if (outputs[0].status === 'fulfilled') parseBeat(outputs[0].value);
+      if (outputs[1].status === 'fulfilled') parseSheet(outputs[1].value);
+      if (outputs[2].status === 'fulfilled') state.instrumentalSheet = outputs[2].value;
+      if (outputs[3].status === 'fulfilled' && outputs[3].value) parseAlignedLyrics(outputs[3].value);
+      if (outputs[4].status === 'fulfilled' && outputs[4].value) parseLrc(outputs[4].value);
+      if (outputs[5].status === 'fulfilled' && outputs[5].value) parseRawAsr(outputs[5].value);
+      if (outputs[6].status === 'fulfilled' && outputs[6].value) {
+        state.vocalsOnlySheet = outputs[6].value;
+        state.vocalsOnlyEvents = (outputs[6].value.events || [])
+          .filter(event => Number.isFinite(eventTime(event)))
+          .slice().sort((a, b) => eventTime(a) - eventTime(b));
+      }
+      if (outputs[7].status === 'fulfilled' && outputs[7].value) parseFunAsr(outputs[7].value);
+      if (outputs[8].status === 'fulfilled' && outputs[8].value) {
+        state.vocalPitch = outputs[8].value;
+        state.acousticNotes = (state.vocalPitch.notes || []).map(note => ({
+          time: Number(note.start_s), end: Number(note.end_s), pitch: Number(note.pitch),
+          confidence: Number(note.confidence),
+        })).filter(note => Number.isFinite(note.time) && Number.isFinite(note.end) &&
+          Number.isFinite(note.pitch));
+      }
+      if (outputs[9].status === 'fulfilled' && outputs[9].value) state.librosa = outputs[9].value;
+      alignFunAsrToVocalNotes();
+      buildCandidateBars();
+      alignOtherTrackToVocals();
+      $('beatSource').textContent = `Beat This!：${state.beat ? `${state.beat.beats_s.length} 拍 / ${state.beat.downbeats_s.length} 小节线` : '缺少原始数据'}`;
+      $('sheetSource').textContent = `SheetSage2：${state.sheet ? `${state.sheetEvents.length} 事件 / 2 条音符轨` : '缺少原始数据'}`;
+      const vocalNotes = state.vocalsOnlyEvents.flatMap(event => getNotes(event))
+        .filter(note => Number(note.track) === 0).length;
+      $('vocalsOnlySource').textContent = state.vocalsOnlySheet
+        ? `纯人声转谱：${vocalNotes} 个音符` : '纯人声转谱：缺少数据';
+      $('vocalPitchSource').textContent = state.vocalPitch
+        ? `声学音高：${state.acousticNotes.length} 个候选（无拍点）` : '声学音高：缺少数据';
+      $('librosaSource').textContent = state.librosa
+        ? `librosa：${state.librosa.tempo_bpm} BPM / ${state.librosa.beats_s.length} 拍`
+        : 'librosa：缺少分析数据';
+      $('librosaRawLink').hidden = !state.librosa;
+      $('librosaSummary').hidden = !state.librosa;
+      if (state.librosa) $('librosaSummary').textContent =
+        `librosa：${state.librosa.tempo_bpm} BPM · ${state.librosa.beats_s.length} 拍点 · ` +
+        `${state.librosa.mix_onsets_s.length} 整曲起音 · ${state.librosa.vocal_onsets_s.length} 人声起音 · ` +
+        `${state.librosa.vocal_pitch.length} 个人声基频采样`;
+      const zeroDuration = state.asrTokens.filter(token => token.end <= token.time).length;
+      $('asrSource').textContent = state.rawAsr
+        ? `${state.rawAsr.model?.split('/').at(-1) || 'ASR'}：${state.asrTokens.length} 字${zeroDuration ? ` / ${zeroDuration} 个零时长` : ''}`
+        : 'ASR：缺少原始数据';
+      const funZeroDuration = state.funAsrTokens.filter(token => token.end <= token.time).length;
+      $('funAsrSource').textContent = state.funAsr
+        ? `Fun-ASR：${state.alignedFunAsrTokens.length}/${state.funAsrTokens.length} 字对齐青色音符` +
+          (funZeroDuration ? ` / ${funZeroDuration} 个零时长` : '')
+        : 'Fun-ASR：缺少原始数据';
+      $('lyricsSource').textContent = state.alignedLyrics
+        ? `${state.alignedLyrics.preview_method?.includes('vocals_only') ? '纯人声音符对齐' : '本次重新对齐'}：${state.alignedLyrics.lines.length} 行 / ${state.lyricWords.length} 字`
+        : state.lrcLines.length ? `原始 LRC：${state.lrcLines.length} 行` : '缺少歌词数据';
+      $('instrumentalRawLink').hidden = !state.instrumentalSheet;
+      $('vocalsOnlyRawLink').hidden = !state.vocalsOnlySheet;
+      $('vocalPitchRawLink').hidden = !state.vocalPitch;
+      $('lyricsRawLink').hidden = !state.alignedLyrics;
+      $('asrRawLink').hidden = !state.rawAsr;
+      $('funAsrRawLink').hidden = !state.funAsr;
+      $('lrcRawLink').hidden = !state.lrcLines.length;
+      $('beatSource').classList.toggle('ok', !!state.beat);
+      $('sheetSource').classList.toggle('ok', !!state.sheet);
+      $('vocalsOnlySource').classList.toggle('ok', !!state.vocalsOnlySheet);
+      $('vocalPitchSource').classList.toggle('ok', !!state.vocalPitch);
+      $('librosaSource').classList.toggle('ok', !!state.librosa);
+      $('asrSource').classList.toggle('ok', !!state.rawAsr);
+      $('funAsrSource').classList.toggle('ok', !!state.funAsr);
+      $('lyricsSource').classList.toggle('ok', !!state.alignedLyrics);
+      if (!state.beat || !state.sheet) $('status').textContent = '缺少模型原始数据。请运行预览脚本并加上 --analyze。';
+      render();
+    } catch (error) { $('status').textContent = `读取失败：${error.message}`; }
+  };
+  const resizeCanvas = (canvas) => {
+    const scale = window.devicePixelRatio || 1;
+    const width = canvas.clientWidth, height = canvas.clientHeight;
+    canvas.width = Math.max(1, Math.round(width * scale));
+    canvas.height = Math.max(1, Math.round(height * scale));
+    const context = canvas.getContext('2d'); context.setTransform(scale, 0, 0, scale, 0, 0);
+    return {context, width, height};
+  };
+  const line = (ctx, x, y1, y2, color, size = 1) => {
+    ctx.strokeStyle = color; ctx.lineWidth = size; ctx.beginPath(); ctx.moveTo(x, y1); ctx.lineTo(x, y2); ctx.stroke();
+  };
+  const drawDetail = () => {
+    const start = Math.max(0, Math.floor(Math.max(0, audio.currentTime - 5) / 8) * 8);
+    const span = 16;
+    const previewX = (time) => 62 + (time - start) / span * ($('detail').clientWidth - 73);
+    const funGroups = [];
+    state.funAsrTokens.filter(token => token.time >= start && token.time <= start + span)
+      .forEach(token => {
+        const key = token.time.toFixed(3);
+        const previous = funGroups.at(-1);
+        if (previous?.key === key) previous.tokens.push(token);
+        else funGroups.push({key, time: token.time, tokens: [token]});
+      });
+    let funRows = 1;
+    let nextRow = 0, previousX = -Infinity;
+    funGroups.forEach(group => {
+      const left = previewX(group.time);
+      if (left - previousX >= 16) nextRow = 0;
+      group.row = nextRow;
+      nextRow += group.tokens.length;
+      funRows = Math.max(funRows, nextRow);
+      previousX = left;
+    });
+    const funExtra = (funRows - 1) * 15;
+    const noteAreaHeight = (state.vocalsOnlySheet ? 640 : 540) + funExtra;
+    $('detail').style.height = `${noteAreaHeight + (state.librosa ? 185 : 0)}px`;
+    const {context: ctx, width, height} = resizeCanvas($('detail'));
+    const x = (time) => 62 + (time - start) / span * (width - 73);
+    ctx.fillStyle = '#0e1722'; ctx.fillRect(0, 0, width, height);
+    for (let second = Math.ceil(start); second <= start + span; second++) {
+      const left = x(second); line(ctx, left, 24, height - 18, '#263848');
+      if (second % 2 === 0) { ctx.fillStyle = '#8498aa'; ctx.font = '11px sans-serif'; ctx.fillText(clock(second), left + 3, 17); }
+    }
+    if (state.librosa) {
+      ctx.fillStyle = '#c799ff'; ctx.font = '11px sans-serif';
+      ctx.fillText('librosa 拍点', 6, 104);
+      line(ctx, 62, 110, width - 11, 110, '#55446c');
+      (state.librosa.beats_s || []).filter(t => t >= start && t <= start + span)
+        .forEach(t => line(ctx, x(t), 88, 111, '#c799ff', 1.5));
+    }
+    ctx.fillStyle = '#61dda0'; ctx.font = '11px sans-serif';
+    ctx.fillText('重构网格', 6, 137);
+    line(ctx, 62, 151, width - 11, 151, '#346d58');
+    state.beatGrid.filter(beat => beat.time >= start && beat.time <= start + span).forEach(beat => {
+      ctx.setLineDash(beat.observed ? [] : [3, 4]);
+      line(ctx, x(beat.time), 133, 152, '#61dda0', beat.observed ? 1.5 : 1);
+    });
+    ctx.setLineDash([]);
+    ctx.fillStyle = '#65c5e6'; ctx.font = '12px sans-serif'; ctx.fillText('Beat This!', 6, 44);
+    line(ctx, 62, 78, width - 11, 78, '#536173');
+    (state.beat?.beats_s || []).filter(t => t >= start && t <= start + span)
+      .forEach(t => line(ctx, x(t), 61, 84, '#65c5e6'));
+    (state.beat?.downbeats_s || []).filter(t => t >= start && t <= start + span)
+      .forEach(t => { line(ctx, x(t), 40, 87, '#65c5e6', 2.5);
+        ctx.fillStyle = '#65c5e6'; ctx.font = '10px sans-serif';
+        ctx.fillText(seconds(t), x(t) + 3, 53); });
+    ctx.save();
+    ctx.globalAlpha = 0.9;
+    state.candidateBars.filter(bar => bar.time >= start && bar.time <= start + span).forEach(bar => {
+      ctx.setLineDash(bar.uncertain ? [7, 6] : []);
+      line(ctx, x(bar.time), 27, height - 12,
+        bar.source === 'sheet' ? '#f4c36c' : '#61dda0', 2.5);
+      ctx.setLineDash([]);
+      ctx.fillStyle = bar.source === 'sheet' ? '#f4c36c' : '#61dda0';
+      ctx.font = 'bold 11px sans-serif';
+      ctx.fillText(String(bar.index + 1), x(bar.time) + 4, 40);
+    });
+    ctx.restore();
+    ctx.fillStyle = '#f4c36c'; ctx.font = '12px sans-serif'; ctx.fillText('和弦', 7, 166);
+    line(ctx, 62, 187, width - 11, 187, '#384655');
+    let lastChord = null;
+    const chords = state.sheetEvents.filter(event => {
+      const chord = event.values?.chord;
+      if (!chord || chord === 'N' || chord === lastChord) return false;
+      lastChord = chord; return true;
+    });
+    chords.filter(event => eventTime(event) >= start && eventTime(event) <= start + span)
+      .forEach(event => { const left = x(eventTime(event));
+        ctx.fillStyle = '#f4c36c'; ctx.font = 'bold 12px sans-serif';
+        ctx.fillText(event.values.chord, left + 3, 181); });
+    ctx.fillStyle = '#9cb2c7'; ctx.font = '11px sans-serif'; ctx.fillText('LRC 行起点', 6, 214);
+    state.lrcLines.filter(line => line.time >= start && line.time <= start + span)
+      .forEach(line => { ctx.fillStyle = '#9cb2c7'; ctx.font = '11px sans-serif';
+        ctx.fillText(line.text, x(line.time) + 2, 237, Math.max(40, x(Math.min(start + span, line.time + 3)) - x(line.time) - 6)); });
+    if (state.funAsr) {
+      ctx.fillStyle = '#7fb6ff'; ctx.font = '11px sans-serif';
+      ctx.fillText('Fun-ASR 字 · 原始时间（固定）', 6, 265);
+      funGroups.forEach(group => {
+        const left = x(group.time);
+        line(ctx, left, 270, 293 + funExtra, '#7fb6ff');
+        ctx.fillStyle = '#a9d0ff'; ctx.font = 'bold 12px sans-serif';
+        group.tokens.forEach((token, index) => {
+          ctx.fillText(String(token.token), left + 2, 288 + (group.row + index) * 15);
+        });
+      });
+    }
+    const unmatchedHere = state.unmatchedFunAsrTokens.filter(token => token.time >= start && token.time < start + span);
+    $('unmatchedFun').textContent = state.funAsr
+      ? `${state.unmatchedFunAsrTokens.length} 个原始字缺少可独占的邻近青色音符` +
+        (unmatchedHere.length ? `；当前窗口：${unmatchedHere.map(token => `${token.token} ${seconds(token.time)}`).join('、')}` : '')
+      : '';
+    const currentKey = keyAt(audio.currentTime);
+    ctx.fillStyle = '#a7b7c7'; ctx.font = '11px sans-serif';
+    ctx.fillText(`SheetSage2 两条音符轨 · ${currentKey ? `1=${midiName(currentKey.reference)} (${currentKey.label})` : '原始数据无调性'}`, 7, 322 + funExtra);
+    const notes = state.sheetEvents.flatMap(event => getNotes(event).map(note => ({event, note})))
+      .filter(({event, note}) => eventTime(event) <= start + span &&
+        (Number(note.end_time) || eventTime(event) + 0.2) >= start && Number.isFinite(Number(note.pitch)));
+    const vocalsOnlyNotes = state.alignedVocalNotes
+      .filter(note => note.time <= start + span && note.end >= start)
+      .map(note => ({event: {time: note.time}, note: {
+        track: 0, pitch: note.pitch, end_time: note.end,
+      }}));
+    const otherNotes = state.alignedOtherNotes
+      .filter(note => note.time <= start + span && note.end >= start)
+      .map(note => ({event: {time: note.time}, note: {
+        track: 1, pitch: note.pitch, end_time: note.end,
+      }}));
+    const noteLanes = [
+      {track: 0, label: '整曲输入 · 人声轨', bottom: 390 + funExtra, color: '#f4c36c', notes},
+      {track: 1, label: '整曲输入 · 其他轨（人声偏移校准）', bottom: 490 + funExtra,
+        color: '#89a9c2', notes: otherNotes, rawNotes: state.alignedOtherNotes},
+    ];
+    if (state.vocalsOnlySheet) noteLanes.push({
+      track: 0, label: '纯人声输入 · 蓝字校准音符', bottom: 590 + funExtra,
+      color: '#63e5d2', notes: vocalsOnlyNotes, rawNotes: state.alignedVocalNotes,
+    });
+    noteLanes.forEach(lane => {
+      let lastLabelX = -Infinity;
+      const laneNotes = lane.notes.filter(({note}) =>
+        (Number(note.track) === 0 ? 0 : 1) === lane.track);
+      ctx.fillStyle = '#8ca0b3'; ctx.font = '11px sans-serif'; ctx.fillText(lane.label, 7, lane.bottom - 28);
+      line(ctx, 62, lane.bottom + 7, width - 11, lane.bottom + 7, '#293b4c');
+      const pitches = laneNotes.map(({note}) => Number(note.pitch));
+      const minPitch = Math.min(...pitches), maxPitch = Math.max(...pitches);
+      if (lane.rawNotes) lane.rawNotes
+        .filter(note => note.rawTime <= start + span && note.rawEnd >= start)
+        .forEach(note => {
+          const left = x(Math.max(start, note.rawTime));
+          const end = Number.isFinite(note.rawEnd) ? note.rawEnd : note.rawTime + .2;
+          const barWidth = Math.max(2, x(Math.min(start + span, end)) - left);
+          const y = lane.bottom - 3 - (maxPitch === minPitch ? 10 : 25 * (note.pitch - minPitch) / (maxPitch - minPitch));
+          ctx.fillStyle = lane.track === 1 ? '#516b84' : '#468c8b';
+          ctx.fillRect(left, y + 7, barWidth, 2);
+        });
+      laneNotes.forEach(({event, note}) => {
+        const noteStart = eventTime(event);
+        const end = Number(note.end_time) || noteStart + 0.2;
+        const left = x(Math.max(start, noteStart));
+        const barWidth = Math.max(2, x(Math.min(start + span, end)) - left);
+        const pitch = Number(note.pitch);
+        const y = lane.bottom - 3 - (maxPitch === minPitch ? 10 : 25 * (pitch - minPitch) / (maxPitch - minPitch));
+        ctx.fillStyle = lane.color; ctx.fillRect(left, y, barWidth, 4);
+        const degree = jianpuPitch(pitch, keyAt(noteStart));
+        if (!degree) return;
+        const center = Math.min(width - 10, left + Math.min(11, barWidth / 2));
+        if (lane.acoustic && (barWidth < 14 || center - lastLabelX < 24)) return;
+        lastLabelX = center;
+        const numeral = degree.label.slice(-1);
+        ctx.textAlign = 'center'; ctx.font = 'bold 12px sans-serif'; ctx.fillStyle = lane.color;
+        ctx.fillText(numeral, center, y - 10);
+        if (degree.label.length > 1) {
+          ctx.font = '9px sans-serif'; ctx.fillText(degree.label.slice(0, -1), center - 9, y - 17);
+        }
+        for (let dot = 0; dot < Math.min(3, Math.abs(degree.octave)); dot++) {
+          ctx.beginPath(); ctx.arc(center, y + (degree.octave > 0 ? -26 - dot * 5 : -5 + dot * 5), 1.2, 0, 2 * Math.PI); ctx.fill();
+        }
+        ctx.textAlign = 'start';
+      });
+    });
+    if (state.librosa) {
+      const top = noteAreaHeight - 20;
+      const inside = time => time >= start && time <= start + span;
+      const onsetRows = [
+        {label: 'librosa 整曲起音', values: state.librosa.mix_onsets_s || [], y: top + 23, color: '#e7b36f'},
+        {label: 'librosa 纯人声起音', values: state.librosa.vocal_onsets_s || [], y: top + 57, color: '#63e5d2'},
+      ];
+      onsetRows.forEach(row => {
+        ctx.fillStyle = row.color; ctx.font = '11px sans-serif'; ctx.fillText(row.label, 7, row.y - 5);
+        line(ctx, 62, row.y + 12, width - 11, row.y + 12, '#314253');
+        row.values.filter(inside).forEach(time => line(ctx, x(time), row.y - 2, row.y + 12, row.color, 1.5));
+      });
+      ctx.fillStyle = '#f49bba'; ctx.font = '11px sans-serif';
+      ctx.fillText('librosa 人声基频', 7, top + 94);
+      ctx.fillStyle = '#8498aa';
+      ctx.fillText('高', 42, top + 110); ctx.fillText('低', 42, top + 160);
+      const pitch = (state.librosa.vocal_pitch || []).filter(point => inside(point.time_s));
+      ctx.strokeStyle = '#f49bba'; ctx.lineWidth = 1.5;
+      let previous = null;
+      pitch.forEach(point => {
+        const y = top + 158 - Math.max(0, Math.min(1, (point.midi - 45) / 40)) * 48;
+        const left = x(point.time_s);
+        if (previous && point.time_s - previous.time_s < .25) {
+          ctx.beginPath(); ctx.moveTo(x(previous.time_s), previous.y); ctx.lineTo(left, y); ctx.stroke();
+        } else { ctx.fillStyle = '#f49bba'; ctx.fillRect(left - 1, y - 1, 2, 2); }
+        previous = {time_s: point.time_s, y};
+      });
+    }
+    line(ctx, x(audio.currentTime), 22, height - 12, '#f46d7d', 2);
+  };
+  const renderMetrics = () => {
+    const at = audio.currentTime;
+    const candidateIndex = state.candidateBars.length ? barAt(state.candidateBars, at) : -1;
+    $('currentBar').textContent = candidateIndex >= 0 ? `#${candidateIndex + 1} · ${seconds(state.candidateBars[candidateIndex].end - state.candidateBars[candidateIndex].start)}` : '首拍之前';
+    const bar = state.otherBarStats[candidateIndex];
+    const shiftedHere = bar ? state.alignedOtherNotes.filter(note =>
+      note.time >= bar.start && note.time < bar.end) : [];
+    const phraseGap = state.otherGapStats.find(gap =>
+      at >= gap.targetStart && at < gap.targetEnd);
+    $('otherAlignment').textContent = bar
+      ? `其他轨：${state.otherAnchors.length}/${state.otherBarStats.length} 小节有人声对应证据；当前小节橙色 ${bar.orangeCount} 音、青色 ${bar.cyanCount} 音、匹配 ${bar.matchedCount} 音` +
+        (bar.reliable ? `，人声偏移 ${bar.offset >= 0 ? '+' : ''}${seconds(bar.offset)}` :
+          phraseGap ? '，本段按两侧人声乐段边界映射' :
+            state.otherAnchors.length ? '，本小节采用前后可靠人声段的偏移' : '，没有可靠人声证据，保持原位') +
+        (shiftedHere.length ? `；本小节 ${shiftedHere.length} 个其他轨音符平均偏移 ${mean(shiftedHere.map(note => note.offset)).toFixed(2)}s` : '') +
+        (phraseGap ? `；乐段间 ${phraseGap.count} 音：原 ${seconds(phraseGap.rawStart)}–${seconds(phraseGap.rawEnd)} → 青 ${seconds(phraseGap.targetStart)}–${seconds(phraseGap.targetEnd)}` : '')
+      : `其他轨：${state.otherAnchors.length}/${state.otherBarStats.length} 小节有人声对应证据`;
+    const chord = state.sheetEvents.filter(event => eventTime(event) <= at && event.values?.chord).at(-1);
+    $('currentChord').textContent = chord ? (chord.values.chord === 'N' ? '无' : chord.values.chord) : '—';
+    const line = state.lrcLines.filter(item => item.time <= at).at(-1);
+    $('currentLine').textContent = line && at - line.time < 12 ? line.text : '—';
+    const asr = state.alignedFunAsrTokens.filter(item => item.displayTime <= at).at(-1);
+    $('currentAsr').textContent = asr && at - asr.displayTime < 0.7
+      ? `${asr.token} · ${seconds(asr.time)}` : '—';
+    $('currentWord').textContent = asr && at - asr.displayTime < 0.7
+      ? `${midiName(asr.notePitch)} · ${seconds(asr.displayTime)}` : '—';
+  };
+  const render = () => {
+    if (Number.isFinite(audio.duration)) state.duration = audio.duration;
+    $('clock').textContent = `${clock(audio.currentTime)} / ${clock(state.duration)}`;
+    $('seek').max = String(Math.max(1, state.duration)); $('seek').value = String(audio.currentTime || 0);
+    $('play').textContent = audio.paused ? '播放' : '暂停';
+    const windowStart = Math.max(0, Math.floor(Math.max(0, audio.currentTime - 5) / 8) * 8);
+    const visibleCandidates = state.candidateBars.filter(bar => bar.time >= windowStart && bar.time < windowStart + 16);
+    $('candidateTimes').textContent = visibleCandidates.length
+      ? `当前窗口：${visibleCandidates.map(bar => `${seconds(bar.time)}${bar.source === 'sheet' ? '（SheetSage2 补线）' : bar.uncertain ? '（推算）' : ''}`).join('、')}`
+      : '当前窗口没有重构小节线';
+    if (state.tempoFit && state.beatGrid.length) {
+      const {best, alternatives} = state.tempoFit;
+      const inferred = state.beatGrid.filter(beat => !beat.observed).length;
+      const supported = state.candidateBars.filter(bar => bar.beatSupport).length;
+      const sheetFallbacks = state.candidateBars.filter(bar => bar.source === 'sheet').length;
+      const inferredBars = state.candidateBars.filter(bar => bar.source === 'inferred').length;
+      const shortBars = state.candidateBars.filter(bar => bar.beats.length !== meterBeats()).length;
+      const other = alternatives.map(item => `${item.bpm.toFixed(1)} BPM`).join('、') || '无';
+      $('analysisDecision').innerHTML = `<strong>建议 ${best.bpm.toFixed(1)} BPM · ${escapeHtml($('songMeter').value)}</strong>
+        （一拍 ${best.period.toFixed(3)} 秒，一小节 ${(best.period * meterBeats()).toFixed(3)} 秒）。
+        另比较：${other}。${state.tempoFit.gridMethod}，补齐 ${inferred} 个未检出的拍点；
+        ${supported}/${state.candidateBars.length} 条小节线附近有 Beat This! 原始重拍，
+        ${sheetFallbacks} 条由 SheetSage2 在异常处补线，${inferredBars} 条由拍点间距推算，${shortBars} 条为短小节。
+        这是可试听的假设，不代表已核定的乐谱。`;
+    } else {
+      $('analysisDecision').textContent = '缺少足够的 Beat This! 拍点，暂时无法推定连续拍网格。';
+    }
+    drawDetail(); renderMetrics();
+  };
+  $('play').addEventListener('click', () => audio.paused ? audio.play() : audio.pause());
+  $('back').addEventListener('click', () => { audio.currentTime = Math.max(0, audio.currentTime - 5); render(); });
+  $('forward').addEventListener('click', () => { audio.currentTime = Math.min(state.duration, audio.currentTime + 5); render(); });
+  $('rate').addEventListener('change', () => { audio.playbackRate = Number($('rate').value); });
+  for (const id of ['songBpm', 'songMeter']) $(id).addEventListener('change', () => {
+    buildCandidateBars(); alignOtherTrackToVocals(); render();
+  });
+  $('seek').addEventListener('input', () => { audio.currentTime = Number($('seek').value); render(); });
+  $('detail').addEventListener('click', (event) => {
+    const rect = event.currentTarget.getBoundingClientRect();
+    const fraction = Math.max(0, Math.min(1, (event.clientX - rect.left - 62) /
+      (rect.width - 73)));
+    const start = Math.max(0, Math.floor(Math.max(0, audio.currentTime - 5) / 8) * 8);
+    audio.currentTime = start + fraction * 16;
+    render();
+  });
+  audio.addEventListener('loadedmetadata', () => {
+    state.duration = audio.duration;
+    const requested = Number(new URLSearchParams(window.location.hash.slice(1)).get('t'));
+    if (Number.isFinite(requested) && requested > 0) audio.currentTime = Math.min(requested, state.duration);
+    buildCandidateBars(); render();
+  });
+  audio.addEventListener('timeupdate', render);
+  audio.addEventListener('play', render); audio.addEventListener('pause', render);
+  window.addEventListener('resize', render);
+  document.addEventListener('keydown', (event) => {
+    if (event.target instanceof HTMLInputElement || event.target instanceof HTMLSelectElement) return;
+    if (event.code === 'Space') { event.preventDefault(); audio.paused ? audio.play() : audio.pause(); }
+    if (event.code === 'ArrowLeft') { audio.currentTime = Math.max(0, audio.currentTime - 2); render(); }
+    if (event.code === 'ArrowRight') { audio.currentTime = Math.min(state.duration, audio.currentTime + 2); render(); }
+  });
+  load();
+</script>
+</body>
+</html>

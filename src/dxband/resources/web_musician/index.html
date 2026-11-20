@@ -1,0 +1,1571 @@
+<!doctype html>
+<!-- SPDX-FileCopyrightText: 2026 DX Band -->
+<!-- SPDX-License-Identifier: GPL-3.0-only -->
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#070a0f">
+  <link rel="icon" type="image/png" href="/logo.png">
+  <title>DX Band 乐手屏</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --accent: #ffd166;
+      --accent-soft: rgba(255, 209, 102, .12);
+      --ink: #f4f7fb;
+      --muted: #8791a3;
+      --panel: rgba(18, 24, 34, .86);
+      --line: rgba(255, 255, 255, .09);
+      --font-scale: 1;
+      font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "PingFang SC",
+        "Microsoft YaHei", sans-serif;
+    }
+    * { box-sizing: border-box; }
+    html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; background: #070a0f; }
+    body {
+      color: var(--ink);
+      background:
+        radial-gradient(circle at 82% -10%, rgba(255, 209, 102, .12), transparent 36%),
+        radial-gradient(circle at 0% 80%, rgba(57, 134, 255, .08), transparent 42%),
+        #070a0f;
+      -webkit-font-smoothing: antialiased;
+      user-select: none;
+    }
+    button { font: inherit; color: inherit; }
+    .shell { height: 100%; display: grid; grid-template-rows: auto 1fr; }
+    header {
+      display: flex; align-items: center; gap: 18px; min-height: 78px;
+      padding: calc(12px + env(safe-area-inset-top)) max(20px, env(safe-area-inset-right)) 12px
+        max(20px, env(safe-area-inset-left));
+      border-bottom: 1px solid var(--line); background: rgba(7, 10, 15, .78);
+      backdrop-filter: blur(18px); z-index: 4;
+    }
+    .brand { display: flex; align-items: center; flex: 0 0 auto; }
+    .mark {
+      width: 48px; height: 40px; overflow: hidden; flex: 0 0 auto;
+      box-shadow: 0 0 24px rgba(73, 93, 255, .2);
+    }
+    .mark img { display: block; width: 100%; height: 100%; object-fit: contain; }
+    .song-meta { min-width: 0; flex: 1; }
+    .song-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 20px; font-weight: 730; }
+    .song-subtitle { margin-top: 5px; color: var(--muted); font-size: 12px; letter-spacing: .03em; }
+    .status { display: flex; align-items: center; gap: 8px; color: #8fd9b6; font-size: 12px; }
+    .status::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: currentColor; box-shadow: 0 0 12px currentColor; }
+    .status.offline { color: #ff7a88; }
+    .header-controls { display: flex; align-items: center; gap: 6px; flex: 0 0 auto; }
+    .transport { color: var(--muted); font-variant-numeric: tabular-nums; font-size: 12px; min-width: 84px; }
+    .tool {
+      height: 34px; min-width: 34px; padding: 0 10px; border: 1px solid var(--line); border-radius: 9px;
+      background: rgba(255, 255, 255, .04); cursor: pointer; touch-action: manipulation; white-space: nowrap;
+    }
+    .tool:active { background: var(--accent-soft); border-color: rgba(255, 209, 102, .35); }
+    .chord-modes {
+      display: inline-flex; height: 34px; border: 1px solid var(--line);
+      border-radius: 9px; background: rgba(255, 255, 255, .025); flex: 0 0 auto;
+    }
+    .chord-mode-option {
+      min-width: 54px; padding: 0 12px; border: 0; border-right: 1px solid var(--line);
+      background: transparent; color: var(--muted); cursor: pointer; touch-action: manipulation;
+      font-size: 13px; font-weight: 650;
+    }
+    .chord-mode-option[aria-pressed="true"] { background: var(--accent); color: #17130a; }
+    .chord-mode-option:focus-visible { outline: 2px solid #fff; outline-offset: -3px; }
+    .chord-key-select {
+      min-width: 86px; padding: 0 24px 0 10px; border: 0; border-left: 1px solid var(--line);
+      border-radius: 0 8px 8px 0; background: transparent; color: var(--muted);
+      cursor: pointer; font-size: 13px; font-weight: 650; font-family: inherit; color-scheme: dark;
+    }
+    .chord-key-select.active { background: var(--accent); color: #17130a; color-scheme: light; }
+    .chord-key-select:focus-visible { outline: 2px solid #fff; outline-offset: -3px; }
+    .stage {
+      position: relative; min-height: 0; overflow-x: hidden; overflow-y: scroll;
+      overscroll-behavior: contain; -webkit-overflow-scrolling: touch; scrollbar-width: none;
+    }
+    .stage::-webkit-scrollbar { display: none; }
+    .scroll-rail {
+      position: fixed; right: 0; z-index: 5; width: 24px; padding: 0 8px;
+      border-radius: 8px;
+      background: linear-gradient(90deg, transparent 0 8px, rgba(255, 255, 255, .08) 8px 16px, transparent 16px);
+      touch-action: none; cursor: pointer;
+    }
+    .scroll-rail[hidden] { display: none; }
+    .scroll-thumb {
+      width: 8px; border-radius: 8px; background: rgba(143, 225, 200, .75);
+      box-shadow: 0 0 6px rgba(143, 225, 200, .2);
+    }
+    .score { position: relative; width: 100%; min-width: 0; padding: var(--score-lead, 34vh) 5vw 48vh; }
+    .follow-button {
+      position: fixed; right: calc(20px + env(safe-area-inset-right)); bottom: calc(20px + env(safe-area-inset-bottom));
+      z-index: 5; padding: 10px 14px; border: 1px solid rgba(143, 225, 200, .6);
+      border-radius: 9px; background: #172c30; color: #b9f6e0; cursor: pointer;
+      box-shadow: 0 4px 18px rgba(0, 0, 0, .35);
+    }
+    .follow-button[hidden] { display: none; }
+    .score-row {
+      position: relative; min-height: calc(104px * var(--font-scale)); padding: 10px 20px;
+      border-bottom: 1px solid rgba(255, 255, 255, .055);
+      transition: background .18s ease, border-color .18s ease;
+    }
+    .score-row.has-melody { padding-top: 22px; }
+    .score-row.has-meter { padding-top: 47px; }
+    .has-melody .beat-cell { grid-template-rows: minmax(calc(38px * var(--font-scale)), auto) calc(82px * var(--font-scale)) minmax(30px, auto); }
+    .melody-cell {
+      min-width: 0; width: 100%; height: calc(76px * var(--font-scale)); display: flex; align-items: flex-start;
+      justify-content: center; gap: 2px; padding-top: calc(16px * var(--font-scale)); align-self: end; overflow: visible;
+      color: #aeb5c0; font-size: calc(clamp(17px, 1.8vw, 27px) * var(--font-scale));
+      font-family: ui-monospace, "SFMono-Regular", Menlo, monospace;
+    }
+    .melody-group {
+      position: relative; display: inline-flex; align-items: flex-start; gap: clamp(1px, .3vw, 5px);
+      width: max-content; max-width: none; flex-shrink: 0; white-space: nowrap;
+    }
+    .melody-beam-line { position: absolute; height: 0; border-bottom: 1px solid #aeb5c0; pointer-events: none; }
+    .melody-triplet::before {
+      content: '3'; position: absolute; bottom: calc(100% + .4em); left: 50%;
+      transform: translateX(-50%); font-size: .54em; line-height: 1;
+    }
+    .melody-tie-layer { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; pointer-events: none; }
+    .melody-note { position: relative; display: inline-flex; align-items: baseline; line-height: 1; padding: 2px 1px 0; }
+    .melody-pitch { position: relative; display: inline-flex; align-items: baseline; }
+    .melody-pitch.has-accidental { padding-left: .48em; }
+    .melody-number { display: inline-block; }
+    .melody-augmentation { font-size: .42em; align-self: flex-end; margin-left: 1px; }
+    .melody-accidental { position: absolute; left: 0; top: -.38em; font-size: .65em; line-height: 1; }
+    .melody-octave { position: absolute; left: 50%; transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; font-size: .48em; }
+    .melody-octave > i { font-style: normal; line-height: .58; }
+    .melody-octave.up { bottom: 100%; }
+    .melody-octave.down { top: 100%; }
+    .melody-pitch.has-accidental .melody-octave { left: calc(50% + .24em); }
+    .melody-rest { font-family: Arial, sans-serif; }
+    .melody-gap { color: #9daaba; font-size: 11px; white-space: nowrap; }
+    .bar-grid { position: relative; display: grid; grid-template-columns: repeat(var(--bar-columns), minmax(0, 1fr)); height: 100%; }
+    .bar-measure {
+      min-width: 0; position: relative; display: grid; grid-template-columns: repeat(var(--bar-beats), minmax(0, 1fr));
+      border-left: 1px solid rgba(255, 255, 255, .16); padding: 0 4px;
+      transition: background .18s ease, box-shadow .18s ease;
+    }
+    .score-row.has-melody .bar-measure { border-left: 0; }
+    .score-row.has-melody .bar-measure::after {
+      content: ''; position: absolute; top: var(--measure-line-top, 0px); left: 0;
+      height: var(--measure-line-height, 0px); border-left: 1px solid rgba(255, 255, 255, .16);
+      pointer-events: none;
+    }
+    .bar-measure.active {
+      background: linear-gradient(180deg, rgba(255, 209, 102, .24), rgba(255, 209, 102, .13));
+      box-shadow: inset 0 -3px 0 rgba(255, 209, 102, .92);
+    }
+    .bar-measure.active .melody-cell { color: #f0f4fa; }
+    .bar-measure.active .melody-beam-line { border-bottom-color: #f0f4fa; }
+    .bar-measure.active .chord-token { background: rgba(255, 209, 102, .2); }
+    .meter-label {
+      position: absolute; top: -22px; left: 0; z-index: 2; transform: translateX(-50%);
+      padding: 2px 5px; border: 1px solid rgba(174, 181, 192, .55); border-radius: 4px;
+      color: #aeb5c0; background: rgba(174, 181, 192, .08);
+      font: 700 calc(11px * var(--font-scale)) ui-monospace, Menlo, monospace;
+      line-height: 1; white-space: nowrap; pointer-events: none;
+    }
+    .bar-measure .beat-cell.bar-start { border-left-color: transparent; }
+    .beat-cell {
+      min-width: 0; padding: 4px 8px; border-left: 1px solid transparent;
+      display: grid; grid-template-columns: minmax(0, 1fr);
+      grid-template-rows: minmax(28px, auto) minmax(30px, auto);
+      align-items: end;
+    }
+    .beat-cell.bar-start { border-left-color: rgba(255, 255, 255, .16); }
+    .chords {
+      min-height: calc(36px * var(--font-scale)); display: flex; align-items: center; justify-content: center; gap: 2px;
+      color: var(--accent); font-family: ui-monospace, "SFMono-Regular", Menlo, monospace;
+      font-size: calc(clamp(14px, 1.9vw, 25px) * var(--font-scale)); font-weight: 750;
+      justify-self: center; width: max-content; text-align: center; white-space: nowrap; letter-spacing: -.025em;
+    }
+    .chords.positioned-chords { position: relative; justify-self: stretch; width: 100%; }
+    .chord-unit { position: absolute; top: 50%; transform: translate(-50%, -50%); white-space: nowrap; }
+    .chord-token {
+      display: inline-block; white-space: nowrap; padding: 2px clamp(2px, .35vw, 6px) 3px;
+      border: 1px solid rgba(255, 209, 102, .5); border-radius: 8px;
+      background: rgba(255, 209, 102, .07); line-height: 1.1;
+    }
+    .melody-key-change { color: #c2c8d0; font-size: .6em; white-space: nowrap; }
+    .chord-sup {
+      display: inline-block; position: relative; top: -.35em;
+      font-size: .67em; line-height: 1;
+    }
+    .lyrics {
+      position: relative; height: 1.25em; min-height: 1.25em; color: #fff;
+      font-size: var(--fitted-lyric-size, var(--live-lyric-size, calc(clamp(17px, calc(2vw + 2px), 29px) * var(--font-scale))));
+      line-height: 1.25;
+      font-weight: 620; justify-self: center; width: max-content; text-align: center;
+      white-space: nowrap;
+    }
+    .lyrics.positioned-lyrics { justify-self: stretch; width: 100%; }
+    .lyric-unit { position: absolute; top: 0; line-height: inherit; transform: translateX(-50%); }
+    .line-chords { color: var(--accent); font: 750 calc(20px * var(--font-scale)) ui-monospace, Menlo, monospace; min-height: 26px; }
+    .line-lyrics { margin-top: 7px; color: #fff; font-size: calc(clamp(24px, 3vw, 38px) * var(--font-scale)); font-weight: 650; }
+    .guide {
+      position: fixed; z-index: 2; top: calc(var(--stage-top, 78px) + clamp(24px, 10vh, 92px));
+      left: 50%; width: min(420px, calc(100% - 32px));
+      transform: translateX(-50%); padding: 13px 22px 15px; border: 1px solid #295b81; border-radius: 14px;
+      background: #0b1a2b; color: #a6dcff;
+    }
+    .guide[hidden] { display: none; }
+    .guide-copy { display: flex; justify-content: center; align-items: baseline; gap: 22px; }
+    .guide-label { font-size: clamp(15px, 2.2vw, 19px); font-weight: 650; }
+    .guide-number { color: #69c8ff; font-size: clamp(32px, 5vw, 44px); line-height: 1; font-variant-numeric: tabular-nums; }
+    .guide-dots { display: flex; justify-content: center; align-items: center; gap: clamp(9px, 3vw, 22px); margin-top: 12px; }
+    .guide-dot { width: 13px; height: 13px; border: 1px solid #5a98c4; border-radius: 50%; background: #376b94; }
+    .guide-dot.elapsed { border-color: #366783; background: #0b1a2b; }
+    .guide-dot.current { border-color: #bce8ff; background: #69c8ff; }
+    .guide-dot.new-bar { margin-left: 12px; }
+    .empty {
+      position: absolute; inset: 0; display: grid; place-items: center; padding: 30px; text-align: center;
+      color: var(--muted);
+    }
+    .empty[hidden] { display: none; }
+    .empty strong { display: block; color: var(--ink); margin-bottom: 8px; font-size: 22px; }
+    .toast {
+      position: fixed; left: 50%; bottom: calc(22px + env(safe-area-inset-bottom)); transform: translate(-50%, 18px);
+      padding: 9px 14px; border-radius: 10px; background: #252c38; opacity: 0; pointer-events: none;
+      transition: .2s ease; z-index: 8; font-size: 13px;
+    }
+    .toast.show { opacity: 1; transform: translate(-50%, 0); }
+    @media (min-width: 681px) and (max-width: 900px) {
+      header {
+        display: grid; grid-template-columns: auto minmax(0, 1fr) auto;
+        grid-template-rows: auto auto; min-height: 98px; gap: 8px 12px;
+        padding: calc(8px + env(safe-area-inset-top)) 16px 8px;
+      }
+      .brand { grid-column: 1; grid-row: 1; }
+      .song-meta { grid-column: 2; grid-row: 1; }
+      .status { grid-column: 3; grid-row: 1; }
+      .header-controls { grid-column: 1 / -1; grid-row: 2; width: 100%; }
+      .header-controls .transport { margin-right: auto; white-space: nowrap; }
+    }
+    @media (max-width: 680px) {
+      header {
+        display: grid; grid-template-columns: auto minmax(0, 1fr) auto;
+        grid-template-rows: auto auto; min-height: 96px; column-gap: 8px; row-gap: 7px;
+        padding: calc(7px + env(safe-area-inset-top)) max(8px, env(safe-area-inset-right)) 7px
+          max(8px, env(safe-area-inset-left));
+      }
+      .brand { grid-column: 1; grid-row: 1; }
+      .mark { width: 36px; height: 30px; }
+      .song-meta { grid-column: 2; grid-row: 1; align-self: center; }
+      .song-title { font-size: 14px; }
+      .song-subtitle { margin-top: 2px; font-size: 11px; }
+      .status { grid-column: 3; grid-row: 1; }
+      .status span { display: none; }
+      .header-controls { grid-column: 1 / -1; grid-row: 2; width: 100%; gap: 4px; }
+      .header-controls .transport { min-width: 0; margin-right: auto; white-space: nowrap; }
+      .tool { height: 32px; min-width: 30px; padding-left: 5px; padding-right: 5px; }
+      .export-label { display: none; }
+      .chord-modes { height: 32px; }
+      .chord-mode-option { min-width: 38px; padding: 0 6px; font-size: 12px; }
+      .chord-key-select { min-width: 66px; padding-left: 5px; padding-right: 16px; font-size: 12px; }
+      .score { padding-left: 2vw; padding-right: 2vw; }
+      .score-row { min-height: 0; padding: 6px 7px; }
+      .score-row.has-melody { padding-top: 20px; }
+      .score-row.has-meter { padding-top: 36px; }
+      .beat-cell { padding-left: 3px; padding-right: 3px; }
+      .has-melody .beat-cell {
+        grid-template-rows: minmax(calc(30px * var(--font-scale)), auto)
+          calc(48px * var(--font-scale)) minmax(24px, auto);
+      }
+      .melody-cell { height: calc(46px * var(--font-scale)); padding-top: calc(8px * var(--font-scale)); }
+      .chords { min-height: calc(28px * var(--font-scale)); }
+    }
+    @media (max-width: 360px) {
+      .header-controls .transport { display: none; }
+      .header-controls .chord-modes { margin-left: auto; }
+    }
+    @media (min-width: 700px) and (max-width: 1279px) and (min-height: 600px) {
+      .score { padding-left: 2vw; padding-right: 2vw; }
+      .score-row { min-height: 0; padding: 6px 4px; }
+      .score-row.has-melody { padding-top: 16px; }
+      .score-row.has-meter { padding-top: 35px; }
+      .bar-measure { padding-left: 2px; padding-right: 2px; }
+      .beat-cell { padding-left: 1px; padding-right: 1px; }
+      .has-melody .beat-cell {
+        grid-template-rows: minmax(calc(28px * var(--font-scale)), auto)
+          calc(46px * var(--font-scale)) minmax(22px, auto);
+      }
+      .chords { font-size: calc(clamp(10px, 1.25vw, 16px) * var(--font-scale)); }
+      .chord-token { padding: 1px 2px 2px; border-radius: 5px; }
+      .melody-cell { height: calc(44px * var(--font-scale)); padding-top: calc(8px * var(--font-scale)); font-size: calc(clamp(11px, 1.4vw, 17px) * var(--font-scale)); }
+      .lyrics { font-size: var(--fitted-lyric-size, calc(clamp(13px, calc(1.5vw + 2px), 18px) * var(--font-scale))); }
+    }
+    @media (orientation: portrait) and (min-width: 681px) {
+      .score-row { min-height: calc(90px * var(--font-scale)); }
+    }
+    .pdf-export { --font-scale: .78 !important; }
+    .pdf-export .score {
+      width: 190mm; max-width: none; padding: 0; will-change: auto;
+    }
+    .pdf-export .stage { overflow: visible; }
+    .pdf-export .follow-button { display: none; }
+    .pdf-export .scroll-rail { display: none; }
+    .pdf-export .score-row { padding: 6px 2px 3px; min-height: 48px; }
+    .pdf-export .score-row.has-melody { padding-top: 12px; }
+    .pdf-export .score-row.has-meter { padding-top: 38px; }
+    .pdf-export .meter-label { color: #4d5561; background: #f3f4f6; border-color: #9ca3af; }
+    .pdf-export .beat-cell {
+      padding: 0 1px; grid-template-rows: 22px 20px;
+    }
+    .pdf-export .has-melody .beat-cell { grid-template-rows: 22px 38px 20px; }
+    .pdf-export .chords { min-height: 20px; font-size: 12px; }
+    .pdf-export .chord-token { padding: 1px 2px; border-radius: 4px; }
+    .pdf-export .melody-cell { height: 36px; padding-top: 7px; font-size: 13px; }
+    .pdf-export .melody-group { gap: 1px; max-width: none; flex-shrink: 0; }
+    .pdf-export .pdf-bar-grid { grid-template-columns: repeat(var(--bar-columns), minmax(0, 1fr)); }
+    .pdf-export .bar-measure { border-left-color: #aab0ba; padding: 0 5px; }
+    .pdf-export .score-row.has-melody .bar-measure { border-left: 0; }
+    .pdf-export .score-row.has-melody .bar-measure::after {
+      content: ''; position: absolute; top: 22px; left: 0; height: 38px;
+      border-left: 1px solid #aab0ba; pointer-events: none;
+    }
+    .pdf-export .bar-measure.active { background: transparent; box-shadow: none; }
+    .pdf-export .lyrics {
+      height: 20px; min-height: 20px; font-size: var(--fitted-lyric-size, 16px);
+      line-height: 20px;
+    }
+    .pdf-export .lyric-unit { line-height: 20px; }
+    .pdf-header, .pdf-watermarks { display: none; }
+    @page { size: A4 portrait; margin: 10mm; }
+    @media print {
+      :root { color-scheme: light; --ink: #161c26; --muted: #4d5561; --accent: #7a4d00; }
+      html, body { width: 190mm; height: auto; overflow: visible; background: #fff !important; }
+      body { color: var(--ink); background: #fff !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+      .shell { display: block; height: auto; }
+      header, .guide, .empty, .toast { display: none !important; }
+      .pdf-watermarks {
+        position: fixed; inset: 24mm 8mm 12mm; z-index: 0;
+        display: grid; grid-template-rows: repeat(3, 1fr); pointer-events: none;
+      }
+      .pdf-watermark {
+        display: flex; align-items: center; justify-content: center; gap: 5mm;
+        color: #29344a; opacity: .065; transform: rotate(-22deg);
+      }
+      .pdf-watermark img { width: 27mm; height: 20mm; object-fit: contain; }
+      .pdf-watermark-copy { line-height: 1.25; white-space: nowrap; }
+      .pdf-watermark-cn { font-size: 17px; font-weight: 760; }
+      .pdf-watermark-en { margin-top: 1mm; font-size: 12px; font-weight: 700; letter-spacing: .08em; }
+      .pdf-watermark-url { margin-top: 1mm; font-size: 10px; }
+      .pdf-header {
+        position: relative; z-index: 1;
+        display: grid; grid-template-columns: 54mm minmax(0, 1fr) 48mm; align-items: center;
+        gap: 5mm; min-height: 21mm; padding: 0 0 5mm; border-bottom: 1px solid #9ca3af;
+      }
+      .pdf-brand { display: flex; align-items: center; gap: 3mm; min-width: 0; }
+      .pdf-logo { width: 14mm; height: 14mm; object-fit: contain; flex: 0 0 auto; }
+      .pdf-brand-copy { min-width: 0; line-height: 1.2; }
+      .pdf-brand-cn { color: #161c26; font-size: 12px; font-weight: 760; white-space: nowrap; }
+      .pdf-brand-en { margin-top: 1.2mm; color: #4d5561; font-size: 9px; font-weight: 650; letter-spacing: .04em; }
+      .pdf-brand-url { margin-top: .7mm; color: #6b7280; font-size: 8px; white-space: nowrap; }
+      .pdf-song { min-width: 0; text-align: center; }
+      .pdf-song-title { color: #111827; font-size: 22px; font-weight: 760; line-height: 1.2; }
+      .pdf-song-artist { margin-top: 1.5mm; color: #4d5561; font-size: 11px; }
+      .pdf-song-details { color: #4d5561; font-size: 10px; line-height: 1.65; text-align: right; white-space: pre-line; }
+      .stage { display: block; position: relative; z-index: 1; overflow: visible; }
+      .score { position: static; width: 190mm; max-width: none; padding: 0; transform: none !important; }
+      .score-row {
+        break-inside: avoid; page-break-inside: avoid; border-bottom: 0;
+        background: transparent !important;
+      }
+      .pdf-bar-grid .beat-cell.bar-start { border-left-color: transparent; }
+      .chords, .line-chords { color: #795000; }
+      .chord-token { border-color: #bca470; background: #fff; }
+      .melody-cell, .melody-gap { color: #303946; }
+      .melody-beam-line { border-bottom-color: #303946; }
+      .lyrics, .line-lyrics { color: #111827; }
+    }
+  </style>
+</head>
+<body>
+  <main class="shell">
+    <div class="pdf-watermarks" aria-hidden="true">
+      <div class="pdf-watermark">
+        <img src="/logo.png" alt="">
+        <div class="pdf-watermark-copy"><div class="pdf-watermark-cn">大象乐队工作站</div><div class="pdf-watermark-en">DX Band</div><div class="pdf-watermark-url">www.dx-band.site</div></div>
+      </div>
+      <div class="pdf-watermark">
+        <img src="/logo.png" alt="">
+        <div class="pdf-watermark-copy"><div class="pdf-watermark-cn">大象乐队工作站</div><div class="pdf-watermark-en">DX Band</div><div class="pdf-watermark-url">www.dx-band.site</div></div>
+      </div>
+      <div class="pdf-watermark">
+        <img src="/logo.png" alt="">
+        <div class="pdf-watermark-copy"><div class="pdf-watermark-cn">大象乐队工作站</div><div class="pdf-watermark-en">DX Band</div><div class="pdf-watermark-url">www.dx-band.site</div></div>
+      </div>
+    </div>
+    <section class="pdf-header" aria-hidden="true">
+      <div class="pdf-brand">
+        <img class="pdf-logo" src="/logo.png" alt="">
+        <div class="pdf-brand-copy">
+          <div class="pdf-brand-cn">大象乐队工作站</div>
+          <div class="pdf-brand-en">DX Band</div>
+          <div class="pdf-brand-url">www.dx-band.site</div>
+        </div>
+      </div>
+      <div class="pdf-song">
+        <div id="pdfSongTitle" class="pdf-song-title"></div>
+        <div id="pdfSongArtist" class="pdf-song-artist"></div>
+      </div>
+      <div id="pdfSongDetails" class="pdf-song-details"></div>
+    </section>
+    <header>
+      <div class="brand"><div class="mark"><img src="/logo.png" alt="DX Band"></div></div>
+      <div class="song-meta"><div id="songTitle" class="song-title">等待主控台</div><div id="songSubtitle" class="song-subtitle">网页乐手屏已就绪</div></div>
+      <div class="header-controls">
+        <div id="transport" class="transport">00:00 · 等待</div>
+        <button id="smaller" class="tool" aria-label="减小字号">A−</button>
+        <button id="larger" class="tool" aria-label="增大字号">A＋</button>
+        <button id="fullscreen" class="tool" type="button" aria-label="进入全屏" aria-pressed="false">全屏</button>
+        <button id="exportPdf" class="tool" type="button" aria-label="导出 PDF"><span class="export-label">导出 </span>PDF</button>
+        <div class="chord-modes" role="group" aria-label="和弦显示调式">
+          <button class="chord-mode-option" type="button" data-chord-mode="degree" aria-pressed="true">级数</button>
+          <select id="chordKeySelect" class="chord-key-select" aria-label="切换调式"><option value="" disabled selected>—</option></select>
+        </div>
+      </div>
+      <div id="status" class="status offline"><span>连接中</span></div>
+    </header>
+    <section id="stage" class="stage" tabindex="0" aria-label="乐谱，可上下滚动">
+      <div id="score" class="score"></div>
+      <div id="empty" class="empty"><div><strong>等待歌曲</strong>主控台加载歌曲后，谱面会自动出现</div></div>
+    </section>
+    <div id="guide" class="guide" hidden>
+      <div class="guide-copy"><span class="guide-label">引导拍子</span><strong id="guideRemaining" class="guide-number">8</strong></div>
+      <div id="guideDots" class="guide-dots" aria-hidden="true"></div>
+    </div>
+    <div id="scrollRail" class="scroll-rail" role="scrollbar" aria-label="滚动乐谱" aria-controls="stage" aria-orientation="vertical" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" tabindex="0" hidden><div id="scrollThumb" class="scroll-thumb"></div></div>
+    <button id="followPlayback" class="follow-button" type="button" hidden>跟随播放</button>
+  </main>
+  <div id="toast" class="toast"></div>
+  <script src="/jianpurender.js"></script>
+  <script>
+    (() => {
+      const $ = (id) => document.getElementById(id);
+      const elements = { score: $('score'), empty: $('empty'), stage: $('stage'), scrollRail: $('scrollRail'), scrollThumb: $('scrollThumb'), followPlayback: $('followPlayback'), title: $('songTitle'), subtitle: $('songSubtitle'), pdfTitle: $('pdfSongTitle'), pdfArtist: $('pdfSongArtist'), pdfDetails: $('pdfSongDetails'), status: $('status'), transport: $('transport'), fullscreen: $('fullscreen'), exportPdf: $('exportPdf'), guide: $('guide'), guideRemaining: $('guideRemaining'), guideDots: $('guideDots'), toast: $('toast') };
+      const pageParams = new URLSearchParams(location.search);
+      const isLocalDisplay = pageParams.get('local') === '1';
+      const isPdfPage = pageParams.get('pdf') === '1';
+      const isOfflinePdfPage = isPdfPage && pageParams.get('offline') === '1';
+      const state = { song: null, display: { chord_mode: 'degree', offset_ms: 0 }, guide: { remaining: 0, total: 0 }, transport: { state: 'empty', position_ms: 0 }, receivedAt: performance.now(), rows: [], measures: [], chordTargets: [], renderRows: [], rowTops: [], rowHeights: [], stageHeight: 0, barsPerRow: 2 };
+      let fontScale = Number(localStorage.getItem('dx-band-font-scale') || 1);
+      let chordMode = localStorage.getItem('dx-band-chord-mode') || '';
+      let selectedKeyMode = '';
+      let selectedKeySong = '';
+      let activeMeasure = null;
+      let autoFollow = true;
+      let scrollDragOffset = null;
+      let scrollDragMetrics = null;
+      let scrollRailFrame = 0;
+      let layoutFrame = 0;
+      let visibleLayoutFrame = 0;
+      let backgroundLayoutTimer = 0;
+      const dirtyLayoutRows = new Set();
+      let lastAnimationAt = 0;
+      let lastTransportText = '';
+      const scrollRailMetrics = { maxScroll: 0, travel: 0 };
+      let pdfExporting = isPdfPage;
+      if (isPdfPage) document.documentElement.classList.add('pdf-export');
+
+      const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
+      const formatTime = (ms) => {
+        const seconds = Math.max(0, Math.floor(ms / 1000));
+        return `${String(Math.floor(seconds / 60)).padStart(2, '0')}:${String(seconds % 60).padStart(2, '0')}`;
+      };
+      const toast = (text) => {
+        elements.toast.textContent = text; elements.toast.classList.add('show');
+        clearTimeout(toast.timer); toast.timer = setTimeout(() => elements.toast.classList.remove('show'), 1800);
+      };
+      const updateFullscreenControl = () => {
+        const active = Boolean(document.fullscreenElement);
+        elements.fullscreen.textContent = active ? '退出' : '全屏';
+        elements.fullscreen.setAttribute('aria-label', active ? '退出全屏' : '进入全屏');
+        elements.fullscreen.setAttribute('aria-pressed', String(active));
+      };
+      const toggleFullscreen = async () => {
+        try {
+          if (document.fullscreenElement) await document.exitFullscreen();
+          else await document.documentElement.requestFullscreen();
+        } catch (_error) {
+          toast('当前浏览器不允许进入全屏');
+        }
+      };
+      const position = () => {
+        const base = Number(state.transport.position_ms || 0);
+        return state.transport.state === 'playing' ? base + performance.now() - state.receivedAt : base;
+      };
+      const applyFontScale = () => {
+        fontScale = clamp(fontScale, .56, 10);
+        document.documentElement.style.setProperty('--font-scale', fontScale.toFixed(2));
+        localStorage.setItem('dx-band-font-scale', String(fontScale));
+        if (state.song && responsiveBarsPerRow() !== state.barsPerRow) {
+          renderSong();
+          return;
+        }
+        if (state.song) setLiveLyricSize(state.renderRows);
+        if (pdfExporting) scheduleScoreLayout();
+        else {
+          state.rows.forEach((row) => dirtyLayoutRows.add(row));
+          measureRows();
+          scheduleVisibleScoreLayout();
+        }
+      };
+      window.dxBandSetFontScale = (scale) => { fontScale = Number(scale) || 1; applyFontScale(); };
+      const measureRows = () => {
+        state.stageHeight = elements.stage.clientHeight;
+        elements.score.style.setProperty('--score-lead', `${Math.round(state.stageHeight * .34)}px`);
+        state.rows = Array.from(elements.score.querySelectorAll('.score-row'));
+        state.rowTops = state.rows.map((row) => row.offsetTop);
+        state.rowHeights = state.rows.map((row) => row.offsetHeight);
+        updateScrollRail();
+      };
+      const updateScrollThumb = () => {
+        const maxScroll = scrollRailMetrics.maxScroll;
+        if (elements.scrollRail.hidden || maxScroll <= 0) return;
+        const fraction = clamp(elements.stage.scrollTop / maxScroll, 0, 1);
+        elements.scrollThumb.style.transform = `translate3d(0, ${scrollRailMetrics.travel * fraction}px, 0)`;
+        const value = Math.round(100 * fraction);
+        if (elements.scrollRail.getAttribute('aria-valuenow') !== String(value)) {
+          elements.scrollRail.setAttribute('aria-valuenow', String(value));
+        }
+      };
+      const scheduleScrollThumbUpdate = () => {
+        if (scrollRailFrame) return;
+        scrollRailFrame = requestAnimationFrame(() => {
+          scrollRailFrame = 0;
+          updateScrollThumb();
+        });
+      };
+      const updateScrollRail = () => {
+        const stage = elements.stage;
+        const bounds = stage.getBoundingClientRect();
+        document.documentElement.style.setProperty('--stage-top', `${bounds.top}px`);
+        const maxScroll = stage.scrollHeight - stage.clientHeight;
+        elements.scrollRail.hidden = isPdfPage || !state.song?.rows?.length || maxScroll <= 1;
+        if (elements.scrollRail.hidden) return;
+        elements.scrollRail.style.top = `${bounds.top + 8}px`;
+        elements.scrollRail.style.height = `${Math.max(0, bounds.height - 16)}px`;
+        const trackHeight = Math.max(0, bounds.height - 16);
+        const thumbHeight = clamp(trackHeight * stage.clientHeight / stage.scrollHeight, 28, trackHeight);
+        scrollRailMetrics.maxScroll = maxScroll;
+        scrollRailMetrics.travel = Math.max(0, trackHeight - thumbHeight);
+        elements.scrollThumb.style.height = `${thumbHeight}px`;
+        updateScrollThumb();
+      };
+      const fitLyricFont = () => {
+        if (!pdfExporting) return;
+        elements.score.querySelectorAll('.bar-grid').forEach((grid) => {
+          grid.style.removeProperty('--fitted-lyric-size');
+          const labels = Array.from(grid.querySelectorAll('.lyrics')).filter((label) => label.textContent.trim());
+          labels.forEach((label) => label.style.removeProperty('transform'));
+          if (!labels.length) return;
+          let size = parseFloat(getComputedStyle(labels[0]).fontSize);
+          const crowded = () => {
+            const bounds = grid.getBoundingClientRect();
+            const rects = labels.flatMap((label) => label.classList.contains('positioned-lyrics')
+              ? Array.from(label.querySelectorAll('.lyric-unit')).map((unit) => unit.getBoundingClientRect())
+              : [label.getBoundingClientRect()]).sort((left, right) => left.left - right.left);
+            if (rects.some((rect) => rect.left < bounds.left + 2 || rect.right > bounds.right - 2)) return true;
+            return rects.some((rect, index) => index + 1 < rects.length && rect.right + 2 > rects[index + 1].left);
+          };
+          grid.style.setProperty('--fitted-lyric-size', `${size}px`);
+          positionLyricUnits(false, grid);
+          while (size > 13 && crowded()) {
+            size -= 1;
+            grid.style.setProperty('--fitted-lyric-size', `${size}px`);
+            positionLyricUnits(false, grid);
+          }
+        });
+      };
+      const fitChordBadges = (scope = elements.score) => {
+        scope.querySelectorAll('.chords').forEach((label) => label.style.removeProperty('transform'));
+        scope.querySelectorAll('.chords .chord-token').forEach((badge) => badge.style.removeProperty('font-size'));
+        scope.querySelectorAll('.bar-grid').forEach((grid) => {
+          const tokens = Array.from(grid.querySelectorAll('.beat-cell .chords .chord-token'));
+          const bounds = tokens.map((token) => token.getBoundingClientRect());
+          const sizes = new Map();
+          for (let index = 0; index + 1 < tokens.length; index += 1) {
+            const firstBounds = bounds[index];
+            const secondBounds = bounds[index + 1];
+            const overlap = firstBounds.right + 2 - secondBounds.left;
+            if (overlap <= 0) continue;
+            const larger = firstBounds.width >= secondBounds.width ? tokens[index] : tokens[index + 1];
+            const largerWidth = Math.max(1, larger === tokens[index] ? firstBounds.width : secondBounds.width);
+            const size = parseFloat(getComputedStyle(larger).fontSize);
+            const minimum = Math.max(11, parseFloat(getComputedStyle(larger.parentElement).fontSize) * .65);
+            const reduced = size * Math.max(.1, (largerWidth - overlap) / largerWidth);
+            sizes.set(larger, Math.min(sizes.get(larger) ?? size, Math.max(minimum, reduced)));
+          }
+          sizes.forEach((size, token) => { token.style.fontSize = `${size}px`; });
+        });
+      };
+      const fitMelodyGroups = (scope = elements.score) => {
+        scope.querySelectorAll('.beat-cell .melody-group').forEach((group) => {
+          group.style.removeProperty('font-size');
+          group.style.removeProperty('transform');
+          const notes = Array.from(group.querySelectorAll('.melody-note'));
+          if (!notes.length) return;
+          const cellElement = group.closest('.beat-cell');
+          const cell = cellElement.getBoundingClientRect();
+          const cellStyle = getComputedStyle(cellElement);
+          const left = cell.left + parseFloat(cellStyle.paddingLeft) + 2;
+          const right = cell.right - parseFloat(cellStyle.paddingRight) - 2;
+          let size = parseFloat(getComputedStyle(group).fontSize);
+          const measuredWidth = () => {
+            const first = notes[0].getBoundingClientRect();
+            const last = notes[notes.length - 1].getBoundingClientRect();
+            return Math.max(1, last.right - first.left);
+          };
+          const available = Math.max(1, right - left);
+          const initialWidth = measuredWidth();
+          if (initialWidth > available && size > 7) {
+            size = Math.max(7, size * available / initialWidth);
+            group.style.fontSize = `${size}px`;
+          }
+          const width = measuredWidth();
+          if (width > available) {
+            group.style.transform = `scaleX(${Math.min(1, available / width)})`;
+          }
+        });
+      };
+      const fitChordText = (scope = elements.score) => {
+        if (pdfExporting) return;
+        scope.querySelectorAll('.beat-cell').forEach((cell) => {
+          const bounds = cell.getBoundingClientRect();
+          const style = getComputedStyle(cell);
+          const available = bounds.width - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight) - 4;
+          cell.querySelectorAll('.chords:not(.positioned-chords)').forEach((label) => {
+            label.style.removeProperty('transform');
+            const width = label.scrollWidth;
+            if (width > available) label.style.transform = `scaleX(${Math.max(0.1, available / width)})`;
+          });
+        });
+      };
+      const positionMeasureLines = (scope = elements.score) => {
+        const positions = Array.from(scope.querySelectorAll('.score-row.has-melody .bar-measure'))
+          .map((measure) => {
+            const melody = measure.querySelector('.melody-cell');
+            if (!melody) return null;
+            const barBounds = measure.getBoundingClientRect();
+            const melodyBounds = melody.getBoundingClientRect();
+            return {measure, top: melodyBounds.top - barBounds.top, height: melodyBounds.height};
+          }).filter(Boolean);
+        positions.forEach(({measure, top, height}) => {
+          measure.style.setProperty('--measure-line-top', `${top}px`);
+          measure.style.setProperty('--measure-line-height', `${height}px`);
+        });
+      };
+      const scoreUnitX = (cell, bounds, step) => {
+        const note = Array.from(cell.querySelectorAll('.melody-note[data-start16th]'))
+          .find((item) => Number(item.dataset.start16th) === step);
+        if (note) {
+          const rect = note.querySelector('.melody-number, .melody-pitch')?.getBoundingClientRect() || note.getBoundingClientRect();
+          return (rect.left + rect.right) / 2 - bounds.left;
+        }
+        const beatStart = Number(cell.dataset.start16th);
+        return Number.isFinite(beatStart)
+          ? bounds.width * clamp((step - beatStart + .5) / 4, .05, .95)
+          : bounds.width / 2;
+      };
+      const positionChordUnits = (scope = elements.score) => {
+        scope.querySelectorAll('.chords.positioned-chords').forEach((label) => {
+          const cell = label.closest('.beat-cell');
+          const bounds = label.getBoundingClientRect();
+          label.querySelectorAll('.chord-unit[data-start16th]').forEach((unit) => {
+            unit.style.left = `${scoreUnitX(cell, bounds, Number(unit.dataset.start16th))}px`;
+          });
+        });
+      };
+      const positionLyricUnits = (fit = false, scope = elements.score) => {
+        scope.querySelectorAll('.lyrics.positioned-lyrics').forEach((label) => {
+          const cell = label.closest('.beat-cell');
+          label.style.removeProperty('transform');
+          label.style.removeProperty('left');
+          if (!fit) label.style.removeProperty('font-size');
+          const notes = new Map(Array.from(cell.querySelectorAll('.melody-note[data-start16th]'))
+            .map((note) => [note.dataset.start16th, note]));
+          const placeUnits = () => {
+            const bounds = label.getBoundingClientRect();
+            const positioned = Array.from(label.querySelectorAll('.lyric-unit[data-start16th]')).flatMap((unit) => {
+              const note = notes.get(unit.dataset.start16th);
+              const rect = note
+                ? note.querySelector('.melody-number, .melody-pitch')?.getBoundingClientRect() || note.getBoundingClientRect()
+                : null;
+              const x = rect
+                ? (rect.left + rect.right) / 2 - bounds.left
+                : scoreUnitX(cell, bounds, Number(unit.dataset.start16th));
+              return [{unit, x, width: unit.getBoundingClientRect().width}];
+            }).sort((left, right) => left.x - right.x);
+            if (!positioned.length) return;
+            const originalMidpoint = (positioned[0].x + positioned[positioned.length - 1].x) / 2;
+            for (let index = 1; index < positioned.length; index += 1) {
+              const previous = positioned[index - 1];
+              const current = positioned[index];
+              current.x = Math.max(current.x, previous.x + (previous.width + current.width) / 2 + 1);
+            }
+            const first = positioned[0];
+            const last = positioned[positioned.length - 1];
+            const left = first.x - first.width / 2;
+            const right = last.x + last.width / 2;
+            const midpoint = (left + right) / 2;
+            const shift = right - left <= bounds.width - 2
+              ? clamp(originalMidpoint - midpoint, 1 - left, bounds.width - 1 - right)
+              : bounds.width / 2 - midpoint;
+            positioned.forEach(({unit, x}) => { unit.style.left = `${x + shift}px`; });
+          };
+          placeUnits();
+        });
+      };
+      const spaceLiveLyrics = (scope = elements.score) => {
+        scope.querySelectorAll('.bar-grid').forEach((grid) => {
+          const labels = Array.from(grid.querySelectorAll('.lyrics'))
+            .filter((label) => label.textContent.trim());
+          labels.forEach((label) => label.style.removeProperty('left'));
+          const items = labels.map((label) => {
+            const units = label.classList.contains('positioned-lyrics')
+              ? Array.from(label.querySelectorAll('.lyric-unit')) : [label];
+            const rects = units.map((unit) => unit.getBoundingClientRect());
+            return {
+              label, left: Math.min(...rects.map((rect) => rect.left)),
+              right: Math.max(...rects.map((rect) => rect.right)), shift: 0,
+            };
+          }).sort((left, right) => left.left - right.left);
+          for (let index = 1; index < items.length; index += 1) {
+            const previous = items[index - 1];
+            const current = items[index];
+            current.shift = Math.max(0, previous.right + 2 - current.left);
+            current.left += current.shift;
+            current.right += current.shift;
+          }
+          items.forEach(({label, shift}) => {
+            if (shift) label.style.left = `${shift}px`;
+          });
+        });
+      };
+      const drawMelodyBeams = (scope = elements.score) => {
+        const scale = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--font-scale')) || 1;
+        scope.querySelectorAll('.bar-grid').forEach((grid) => {
+          grid.querySelectorAll('.melody-beam-line').forEach((line) => line.remove());
+          const gridBounds = grid.getBoundingClientRect();
+          const timedNotes = Array.from(grid.querySelectorAll('.melody-note[data-duration16ths]'));
+          const contentBottom = Math.max(...timedNotes.map((note) => {
+            const lowerDots = note.querySelector('.melody-octave.down');
+            return (lowerDots || note).getBoundingClientRect().bottom;
+          }));
+          const drawRun = (run, level) => {
+            if (!run.length) return;
+            // Keep every duration line in this score row below its lowest octave dot.
+            const left = run[0].getBoundingClientRect().left - gridBounds.left;
+            const right = run[run.length - 1].getBoundingClientRect().right - gridBounds.left;
+            const line = document.createElement('span'); line.className = 'melody-beam-line';
+            line.dataset.level = String(level);
+            if (run[0].classList.contains('melody-rest')) line.classList.add('rest-beam');
+            if (run.some((note) => note.classList.contains('needs-review'))) line.classList.add('needs-review');
+            const inset = Math.min(3 * scale, Math.max(0, (right - left - 6) / 2));
+            line.style.left = `${left + inset}px`; line.style.width = `${right - left - inset * 2}px`;
+            line.style.top = `${contentBottom - gridBounds.top + (level === 2 ? 8 : 4) * scale}px`;
+            grid.appendChild(line);
+          };
+          grid.querySelectorAll('.melody-group').forEach((group) => {
+            const notes = Array.from(group.querySelectorAll('.melody-note:not(.melody-rest)[data-duration16ths]'));
+            if (!notes.length) return;
+            if (group.classList.contains('melody-triplet')) {
+              drawRun(notes, 1);
+              return;
+            }
+            [1, 2].forEach((level) => {
+              let run = [];
+              const flush = () => { drawRun(run, level); run = []; };
+              notes.forEach((note) => {
+                const start = Number(note.dataset.start16th);
+                const duration = Number(note.dataset.duration16ths);
+                const eligible = level === 1 ? duration < 4 : duration < 2;
+                const previous = run[run.length - 1];
+                const adjacent = previous && Number(previous.dataset.start16th) + Number(previous.dataset.duration16ths) === start;
+                // The enclosing melody group is one beat; four adjacent sixteenths
+                // keep both beam lines continuous across its half-beat midpoint.
+                if (!eligible || (previous && !adjacent)) flush();
+                if (eligible) run.push(note);
+              });
+              flush();
+            });
+          });
+          grid.querySelectorAll('.melody-rest[data-duration16ths]').forEach((rest) => {
+            const duration = Number(rest.dataset.duration16ths);
+            if (duration < 4) drawRun([rest], 1);
+            if (duration < 2) drawRun([rest], 2);
+          });
+        });
+      };
+      const drawMelodyTies = (scope = elements.score) => {
+        const namespace = 'http://www.w3.org/2000/svg';
+        scope.querySelectorAll('.bar-grid').forEach((grid) => {
+          grid.querySelector('.melody-tie-layer')?.remove();
+          const notes = Array.from(grid.querySelectorAll('.melody-note[data-tie-id]'));
+          if (!notes.length) return;
+          const bounds = grid.getBoundingClientRect();
+          const svg = document.createElementNS(namespace, 'svg');
+          svg.classList.add('melody-tie-layer');
+          svg.setAttribute('viewBox', `0 0 ${bounds.width} ${bounds.height}`);
+          const curve = (from, to) => {
+            if (to.x <= from.x + 2) return;
+            const peak = Math.min(from.y, to.y) - 9;
+            const path = document.createElementNS(namespace, 'path');
+            path.setAttribute('d', `M ${from.x} ${from.y} C ${from.x + 6} ${peak}, ${to.x - 6} ${peak}, ${to.x} ${to.y}`);
+            path.setAttribute('fill', 'none');
+            path.setAttribute('stroke', '#aeb5c0');
+            path.setAttribute('stroke-width', '1.6');
+            path.setAttribute('stroke-linecap', 'round');
+            svg.appendChild(path);
+          };
+          const point = (note, side) => {
+            const token = note.querySelector('.melody-number, .melody-pitch') || note;
+            const rect = token.getBoundingClientRect();
+            const up = note.querySelector('.melody-octave.up')?.getBoundingClientRect();
+            return { x: (side === 'right' ? rect.right : rect.left) - bounds.left,
+                     y: Math.min(rect.top, up?.top ?? rect.top) - bounds.top - 3 };
+          };
+          notes.forEach((note) => {
+            if (note.dataset.tieOut === 'true') {
+              const next = notes.find((candidate) => candidate.dataset.tieId === note.dataset.tieId && candidate.dataset.tieIn === 'true' && Number(candidate.dataset.start16th) > Number(note.dataset.start16th));
+              const start = point(note, 'right');
+              curve(start, next ? point(next, 'left') : {x: bounds.width - 5, y: start.y});
+            }
+            if (note.dataset.tieIn === 'true') {
+              const previous = notes.find((candidate) => candidate.dataset.tieId === note.dataset.tieId && candidate.dataset.tieOut === 'true' && Number(candidate.dataset.start16th) < Number(note.dataset.start16th));
+              if (!previous) {
+                const end = point(note, 'left');
+                curve({x: 5, y: end.y}, end);
+              }
+            }
+          });
+          if (svg.childNodes.length) grid.appendChild(svg);
+        });
+      };
+      const refreshScoreLayout = (scope = elements.score) => {
+        fitMelodyGroups(scope);
+        positionChordUnits(scope);
+        if (pdfExporting) {
+          positionLyricUnits(false, scope);
+          fitLyricFont();
+        }
+        fitChordBadges(scope);
+        fitChordText(scope);
+        positionLyricUnits(true, scope);
+        if (!pdfExporting) {
+          spaceLiveLyrics(scope);
+          positionMeasureLines(scope);
+        }
+        drawMelodyBeams(scope);
+        drawMelodyTies(scope);
+        if (scope === elements.score) measureRows();
+      };
+      const scheduleScoreLayout = () => {
+        if (layoutFrame) cancelAnimationFrame(layoutFrame);
+        if (backgroundLayoutTimer) clearTimeout(backgroundLayoutTimer);
+        backgroundLayoutTimer = 0;
+        layoutFrame = requestAnimationFrame(() => {
+          layoutFrame = 0;
+          dirtyLayoutRows.clear();
+          if (pdfExporting) refreshScoreLayout();
+          else {
+            measureRows();
+            state.rows.forEach((row) => dirtyLayoutRows.add(row));
+            scheduleVisibleScoreLayout();
+          }
+        });
+      };
+      const scheduleBackgroundScoreLayout = () => {
+        if (backgroundLayoutTimer || !dirtyLayoutRows.size) return;
+        backgroundLayoutTimer = setTimeout(() => {
+          backgroundLayoutTimer = 0;
+          const row = dirtyLayoutRows.values().next().value;
+          if (!row) return;
+          dirtyLayoutRows.delete(row);
+          refreshScoreLayout(row);
+          scheduleBackgroundScoreLayout();
+        }, 16);
+      };
+      const scheduleVisibleScoreLayout = () => {
+        if (visibleLayoutFrame || !dirtyLayoutRows.size || !state.rows.length) return;
+        visibleLayoutFrame = requestAnimationFrame(() => {
+          visibleLayoutFrame = 0;
+          const visibleTop = elements.stage.scrollTop - 100;
+          const visibleBottom = elements.stage.scrollTop + state.stageHeight + 100;
+          let updated = false;
+          for (let index = 0; index < state.rows.length; index += 1) {
+            const row = state.rows[index];
+            if (!dirtyLayoutRows.has(row)) continue;
+            if (state.rowTops[index] + state.rowHeights[index] < visibleTop || state.rowTops[index] > visibleBottom) continue;
+            refreshScoreLayout(row);
+            dirtyLayoutRows.delete(row);
+            updated = true;
+          }
+          if (updated) measureRows();
+          scheduleBackgroundScoreLayout();
+        });
+      };
+      const liveLyricBaseSize = () => (window.innerWidth >= 700
+        && window.innerWidth < 1280 && window.innerHeight >= 600
+        ? clamp(window.innerWidth * .015 + 2, 13, 18)
+        : clamp(window.innerWidth * .02 + 2, 17, 29)) * fontScale;
+      const liveScoreWidth = () => window.innerWidth < 700
+        ? window.innerWidth * .96 - 16
+        : window.innerWidth * (window.innerWidth < 1280 ? .96 : .90) - 48;
+      const lyricDemand = (row) => row.beats.reduce((demand, beat) => {
+        const plain = Array.from(String(beat.lyrics || '')).length;
+        const units = (beat.lyric_units || []).reduce((length, unit) =>
+          length + Array.from(String(unit.text || '')).length, 0);
+        const characters = Math.max(plain, units);
+        return {
+          characters: demand.characters + characters,
+          labels: demand.labels + Number(characters > 0),
+        };
+      }, {characters: 0, labels: 0});
+      const setLiveLyricSize = (rows) => {
+        if (pdfExporting) return;
+        const available = liveScoreWidth();
+        const size = rows.filter((row) => row.layout === 'bars').reduce((current, row) => {
+          const demand = lyricDemand(row);
+          return demand.characters
+            ? Math.min(current, (available - demand.labels * 2) / demand.characters)
+            : current;
+        }, liveLyricBaseSize());
+        document.documentElement.style.setProperty('--live-lyric-size', `${Math.max(8, size)}px`);
+      };
+      const responsiveBarsPerRow = () => {
+        if (pdfExporting) return 4;
+        if (window.innerWidth < 700 || window.innerHeight < 600) return 1;
+        const usableWidth = liveScoreWidth();
+        const widthLimit = usableWidth >= 4 * 145 * fontScale ? 4
+          : usableWidth >= 2 * 145 * fontScale ? 2 : 1;
+        if (!state.song || widthLimit === 1) return widthLimit;
+        const lyricSize = liveLyricBaseSize();
+        for (const count of [4, 2]) {
+          if (count > widthLimit) continue;
+          const crowded = buildRenderRows(state.song, count).some((row) => {
+            if (row.layout !== 'bars') return false;
+            const demand = lyricDemand(row);
+            return demand.characters * lyricSize + demand.labels * 2 > usableWidth;
+          });
+          if (!crowded) return count;
+        }
+        return 1;
+      };
+      const displayKeys = ['C', 'C#', 'D', 'Eb', 'E', 'F', 'F#', 'G', 'Ab', 'A', 'Bb', 'B'];
+      const pitchNames = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+      const flatPitchNames = ['C', 'Db', 'D', 'Eb', 'E', 'F', 'Gb', 'G', 'Ab', 'A', 'Bb', 'B'];
+      const notePitch = (note) => pitchNames.indexOf(({Db:'C#', Eb:'D#', Gb:'F#', Ab:'G#', Bb:'A#'})[note] || note);
+      const sourceTonic = (song) => (song?.original_key || song?.numbered_key || 'C').replace(/m(?:in)?$/, '');
+      const minorSource = (song) => /m(?:in)?$/.test(song?.original_key || '');
+      const originalKeyMode = () => {
+        const pitch = notePitch(sourceTonic(state.song));
+        return `key:${displayKeys[pitch < 0 ? 0 : pitch]}`;
+      };
+      const normalizedChordMode = (mode) => mode === 'degree' || mode === 'chord' || mode === 'chord_c'
+        || displayKeys.some((key) => mode === `key:${key}`) ? mode : 'degree';
+      const resolveLegacyMode = (mode, song) => {
+        if (mode === 'chord_c') return 'key:C';
+        if (mode !== 'chord') return mode;
+        const tonic = notePitch(sourceTonic(song));
+        return `key:${displayKeys[tonic < 0 ? 0 : tonic]}`;
+      };
+      const transposeLabel = (label, targetKey, originalKey, minor = false) => {
+        const match = String(label || '').match(/^([A-G][#b]?)([^/]*)(?:\/([A-G][#b]?))?$/);
+        if (!match) return label;
+        const shift = (notePitch(targetKey) + (minor ? 3 : 0)) % 12;
+        const preferFlats = targetKey.includes('b') || (minor && ['C', 'F', 'G'].includes(targetKey))
+          || (notePitch(targetKey) === notePitch(originalKey) && originalKey?.includes('b'));
+        const names = preferFlats ? flatPitchNames : pitchNames;
+        const move = (note) => names[(notePitch(note) + shift) % 12];
+        return move(match[1]) + match[2] + (match[3] ? `/${move(match[3])}` : '');
+      };
+      const chordLabels = (item) => {
+        if (chordMode.startsWith('key:')) {
+          const labels = item.chord_modes?.chord_c || item.chord_modes?.chord || [];
+          return labels.map((label) => transposeLabel(label, chordMode.slice(4), sourceTonic(state.song), minorSource(state.song)));
+        }
+        return item.chord_modes?.[chordMode] || item.chords || [];
+      };
+      const selectedKeyDetails = () => {
+        if (!chordMode.startsWith('key:')) return null;
+        const originalPitch = notePitch(sourceTonic(state.song));
+        const selectedPitch = notePitch(chordMode.slice(4));
+        if (originalPitch < 0 || selectedPitch < 0) return null;
+        const capo = (originalPitch - selectedPitch + 12) % 12;
+        return {capo, transpose: capo <= 5 ? capo : capo - 12};
+      };
+      const chordSuperscriptIndices = (label) => {
+        const text = String(label || '');
+        const indices = new Set();
+        Array.from(text).forEach((character, index) => { if (character === '#' || character === 'b') indices.add(index); });
+        const root = text.match(/^(?:[#b]?[1-7]|[A-G][#b]?)/);
+        if (!root) return indices;
+        const slash = text.indexOf('/');
+        const suffixEnd = slash < 0 ? text.length : slash;
+        for (let index = root[0].length; index < suffixEnd; index += 1) {
+          if (text[index] === '7') indices.add(index);
+        }
+        return indices;
+      };
+      const appendChordToken = (container, label) => {
+        const text = String(label || '');
+        const superscripts = chordSuperscriptIndices(text);
+        const token = document.createElement('span'); token.className = 'chord-token';
+        Array.from(text).forEach((character, index) => {
+          if (!superscripts.has(index)) { token.appendChild(document.createTextNode(character)); return; }
+          const sup = document.createElement('span'); sup.className = 'chord-sup';
+          sup.textContent = character === '#' ? '♯' : character === 'b' ? '♭' : character;
+          token.appendChild(sup);
+        });
+        container.appendChild(token);
+      };
+      const renderChordLabels = (container, labels, separator) => {
+        labels.forEach((label, index) => {
+          if (index) container.appendChild(document.createTextNode(separator));
+          appendChordToken(container, label);
+        });
+      };
+      const renderPositionedChords = (container, units) => {
+        units.forEach((unit) => {
+          const wrapper = document.createElement('span'); wrapper.className = 'chord-unit';
+          wrapper.dataset.start16th = String(unit.start_16th);
+          appendChordToken(wrapper, chordLabels(unit)[0] || '');
+          container.appendChild(wrapper);
+        });
+      };
+      const updateChordModeControl = () => {
+        chordMode = normalizedChordMode(chordMode);
+        document.querySelectorAll('[data-chord-mode]').forEach((button) => {
+          const selected = button.dataset.chordMode === chordMode;
+          button.setAttribute('aria-pressed', String(selected));
+        });
+        const select = $('chordKeySelect');
+        if (chordMode.startsWith('key:')) selectedKeyMode = chordMode;
+        select.value = selectedKeyMode || originalKeyMode();
+        select.classList.toggle('active', chordMode.startsWith('key:'));
+      };
+      const updateKeyOptions = () => {
+        const select = $('chordKeySelect');
+        const sourceKey = state.song?.original_key || state.song?.numbered_key || '';
+        const original = sourceTonic(state.song);
+        const songIdentity = `${state.song?.id || state.song?.title || ''}:${sourceKey}`;
+        if (selectedKeySong !== songIdentity) {
+          selectedKeySong = songIdentity;
+          selectedKeyMode = chordMode.startsWith('key:') ? chordMode : originalKeyMode();
+        }
+        select.replaceChildren();
+        displayKeys.forEach((key) => {
+          const originalKey = notePitch(key) === notePitch(original);
+          const label = originalKey
+            ? `${key}(原key${sourceKey === key ? '' : ` ${sourceKey}`})`
+            : key;
+          select.add(new Option(label, `key:${key}`));
+        });
+        updateChordModeControl();
+      };
+      const updateSongDetails = () => {
+        const song = state.song;
+        if (!song) return;
+        const details = [`原KEY ${song.original_key || song.numbered_key}`, `${song.melody_bpm || song.bpm} BPM`];
+        const selected = selectedKeyDetails();
+        if (song.melody_reference) {
+          const transpose = selected?.transpose ?? song.melody_transpose;
+          const transposeLabel = Number.isInteger(transpose)
+            ? `（移调${transpose >= 0 ? '+' : ''}${transpose}）`
+            : '';
+          details.push(`1=${song.melody_reference}${transposeLabel}`);
+        } else if (selected) {
+          details.splice(1, 0, `移调${selected.transpose >= 0 ? '+' : ''}${selected.transpose}`);
+        }
+        if (selected) {
+          details.splice(1, 0, `Capo ${selected.capo}`);
+        }
+        elements.subtitle.textContent = details.join(' · ');
+        elements.pdfDetails.textContent = details.join('\n');
+      };
+      const persistChordMode = () => {
+        if (isLocalDisplay) {
+          fetch('/local-mode?local=1', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ mode: chordMode }),
+          }).then((response) => { if (!response.ok) throw new Error('save failed'); })
+            .catch(() => toast('保存和弦模式失败'));
+        }
+      };
+      const switchChordMode = (mode) => {
+        const nextMode = normalizedChordMode(mode);
+        if (nextMode === chordMode) {
+          persistChordMode();
+          return;
+        }
+        chordMode = nextMode;
+        localStorage.setItem('dx-band-chord-mode', chordMode);
+        persistChordMode();
+        updateChordModeControl();
+        updateSongDetails();
+        let changed = false;
+        for (const target of state.chordTargets) {
+          const labels = chordLabels(target.item);
+          if (target.labels.length === labels.length
+              && target.labels.every((label, index) => label === labels[index])) continue;
+          target.node.replaceChildren();
+          if (target.keyChange) target.node.appendChild(target.keyChange);
+          if (target.item.chord_units?.length) renderPositionedChords(target.node, target.item.chord_units);
+          else renderChordLabels(target.node, labels, target.separator);
+          target.labels = labels;
+          changed = true;
+        }
+        if (changed) {
+          state.rows.forEach((row) => dirtyLayoutRows.add(row));
+          scheduleVisibleScoreLayout();
+        }
+      };
+      const buildRenderRows = (song, barsPerRow) => {
+        const rows = [];
+        const beatsPerBar = song.beats_per_bar || 4;
+        let bars = [];
+        const flushBars = () => {
+          if (!bars.length) return;
+          const sections = bars.map((bar) => bar.section).filter((value, position, values) => value && values.indexOf(value) === position);
+          rows.push({
+            layout: 'bars', start_ms: bars[0].start_ms, end_ms: bars[bars.length - 1].end_ms,
+            section: sections.join(' / '), bar_count: bars.length,
+            bars: bars.slice(),
+            beats: bars.flatMap((bar) => bar.beats),
+          });
+          bars = [];
+        };
+        song.rows.forEach((source) => {
+          if (source.layout !== 'bars') { flushBars(); rows.push(source); return; }
+          if (source.score_bar) {
+            bars.push({start_ms: source.start_ms, end_ms: source.end_ms, section: source.section, beats: source.beats, score: true, meter: source.meter, meter_uncertain: source.meter_uncertain});
+            if (bars.length === barsPerRow) flushBars();
+            return;
+          }
+          if (bars.some((bar) => bar.score)) flushBars();
+          for (let offset = 0; offset < source.beats.length; offset += beatsPerBar) {
+            const nextBeat = source.beats[offset + beatsPerBar];
+            bars.push({
+              start_ms: offset === 0 ? source.start_ms : source.beats[offset].at_ms,
+              end_ms: nextBeat ? nextBeat.at_ms : source.end_ms,
+              section: source.section,
+              beats: source.beats.slice(offset, offset + beatsPerBar),
+            });
+            if (bars.length === barsPerRow) flushBars();
+          }
+        });
+        flushBars();
+        return rows;
+      };
+      const splitScoreRow = (source, bars) => ({
+          ...source,
+          start_ms: bars[0].start_ms,
+          end_ms: bars[bars.length - 1].end_ms,
+          section: [...new Set(bars.map(bar => bar.section).filter(Boolean))].join(' / '),
+          bar_count: bars.length,
+          bars,
+          beats: bars.flatMap(bar => bar.beats),
+      });
+      const buildPdfRows = (song) => {
+        const rows = buildRenderRows(song, 4);
+        const pdfBarWidth = 190 * 96 / 25.4 / 4;
+        const usableBarWidth = pdfBarWidth - 18;
+        return rows.flatMap((row) => {
+          if (row.layout !== 'bars' || row.bars.length < 3) return [row];
+          const dense = row.bars.some((bar) => {
+            const demand = lyricDemand(bar);
+            // Leave room for labels anchored to notes near beat and bar boundaries.
+            return demand.characters * 16 + demand.labels * 2 > usableBarWidth * .8;
+          });
+          if (!dense) return [row];
+          return [splitScoreRow(row, row.bars.slice(0, 2)), splitScoreRow(row, row.bars.slice(2))];
+        });
+      };
+      const renderMelodyNotes = (container, events, key, tonicMidi, triplet = false) => {
+        const group = document.createElement('span');
+        group.className = 'melody-group';
+        if (triplet) {
+          group.classList.add('melody-triplet');
+          group.setAttribute('aria-label', '八分音符三连音');
+        }
+        events.forEach((note) => {
+          if (note.kind === 'rest' || note.kind === 'hold') {
+            const glyph = document.createElement('span');
+            const duration = Number(note.duration_16ths);
+            glyph.className = note.kind === 'rest'
+              ? `melody-note melody-rest${duration < 4 ? ' short' : ''}${duration < 2 ? ' sixteenth' : ''}`
+              : 'melody-hold';
+            glyph.textContent = note.kind === 'rest' ? '0' : '—';
+            glyph.setAttribute('aria-label', note.kind === 'rest' ? `休止 ${duration} 个十六分音符` : '延音');
+            if (note.kind === 'rest' && note.start_16th !== undefined && note.duration_16ths !== undefined) {
+              glyph.dataset.start16th = String(note.start_16th);
+              glyph.dataset.duration16ths = String(note.duration_16ths);
+            }
+            if (note.kind === 'rest' && duration === 3) {
+              const dot = document.createElement('span'); dot.className = 'melody-augmentation';
+              dot.textContent = '•'; glyph.appendChild(dot);
+            }
+            group.appendChild(glyph);
+            return;
+          }
+          const noteKey = note.melody_key ?? key;
+          const noteTonicMidi = note.melody_tonic_midi ?? tonicMidi;
+          const referenceDot = window.jr?.mapMidiToJianpu(Number(noteTonicMidi), Number(noteKey))?.octaveDot || 0;
+          const pitch = window.jr?.mapMidiToJianpu(Number(note.midi), Number(noteKey));
+          const octaveDot = (pitch?.octaveDot || 0) - referenceDot;
+          const glyph = document.createElement('span');
+          glyph.className = `melody-note${note.review === 'needs_review' ? ' needs-review' : ''}`;
+          if (note.start_16th !== undefined && note.duration_16ths !== undefined) {
+            glyph.dataset.start16th = String(note.start_16th);
+            glyph.dataset.duration16ths = String(note.duration_16ths);
+          }
+          if (note.tie_id !== undefined) {
+            glyph.dataset.tieId = String(note.tie_id);
+            glyph.dataset.tieIn = String(Boolean(note.tie_in));
+            glyph.dataset.tieOut = String(Boolean(note.tie_out));
+          }
+          glyph.setAttribute('aria-label', `MIDI ${note.midi}，${note.review === 'needs_review' ? '待校' : '候选'}${note.tie_id !== undefined ? '，连音' : ''}`);
+          const pitchToken = document.createElement('span'); pitchToken.className = 'melody-pitch';
+          if (pitch?.accidental) {
+            pitchToken.classList.add('has-accidental');
+            const accidental = document.createElement('span'); accidental.className = 'melody-accidental';
+            accidental.textContent = pitch.accidental === 1 ? '♯' : '♭'; pitchToken.appendChild(accidental);
+          }
+          const number = document.createElement('span'); number.className = 'melody-number';
+          number.textContent = pitch ? String(pitch.jianpuNumber) : '?';
+          pitchToken.appendChild(number);
+          if (!triplet && [3, 6, 12].includes(Number(note.duration_16ths))) {
+            const dot = document.createElement('span'); dot.className = 'melody-augmentation';
+            dot.textContent = '•'; glyph.appendChild(dot);
+          }
+          if (octaveDot) {
+            const dots = document.createElement('span');
+            dots.className = `melody-octave ${octaveDot > 0 ? 'up' : 'down'}`;
+            for (let count = 0; count < Math.min(3, Math.abs(octaveDot)); count += 1) {
+              const dot = document.createElement('i'); dot.textContent = '•'; dots.appendChild(dot);
+            }
+            pitchToken.appendChild(dots);
+          }
+          glyph.prepend(pitchToken);
+          group.appendChild(glyph);
+        });
+        container.appendChild(group);
+      };
+      const renderSong = (rowsOverride = null) => {
+        const song = state.song;
+        elements.score.innerHTML = '';
+        state.rows = []; state.measures = []; state.chordTargets = []; state.rowTops = []; state.rowHeights = [];
+        activeMeasure = null;
+        dirtyLayoutRows.clear();
+        if (backgroundLayoutTimer) clearTimeout(backgroundLayoutTimer);
+        backgroundLayoutTimer = 0;
+        if (!song || !song.rows || !song.rows.length) {
+          elements.empty.hidden = false;
+          elements.title.textContent = song ? song.title : '等待主控台';
+          elements.subtitle.textContent = song ? '这首歌暂时没有可显示的谱面' : '网页乐手屏已就绪';
+          elements.pdfTitle.textContent = song?.title || '';
+          elements.pdfArtist.textContent = song?.artist || '';
+          elements.pdfDetails.textContent = '';
+          state.renderRows = []; updateScrollRail(); return;
+        }
+        state.barsPerRow = responsiveBarsPerRow();
+        state.renderRows = rowsOverride || (pdfExporting ? buildPdfRows(song) : buildRenderRows(song, state.barsPerRow));
+        setLiveLyricSize(state.renderRows);
+        elements.empty.hidden = true;
+        elements.title.textContent = song.artist ? `${song.title} — ${song.artist}` : song.title;
+        updateSongDetails();
+        elements.pdfTitle.textContent = song.title || '';
+        elements.pdfArtist.textContent = song.artist || '';
+        const fragment = document.createDocumentFragment();
+        state.renderRows.forEach((data, index) => {
+          const row = document.createElement('article');
+          row.className = 'score-row'; row.dataset.index = String(index);
+          const rowMeasures = [];
+          if (data.layout === 'bars') {
+            const hasMelody = data.beats.some((beat) => beat.rest || beat.melody_events?.length || beat.melody_notes?.length || beat.melody_hold || beat.melody_gap);
+            if (hasMelody) row.classList.add('has-melody');
+            if (data.bars.some((bar) => bar.meter)) row.classList.add('has-meter');
+            const grid = document.createElement('div'); grid.className = 'bar-grid';
+            const scoreGrid = data.beats.some((beat) => beat.bar_start !== undefined);
+            grid.style.setProperty('--bar-columns', String(data.bar_count));
+            if (scoreGrid) grid.dataset.scoreBar = 'true';
+            if (pdfExporting) grid.classList.add('pdf-bar-grid');
+            const appendBeat = (beat, beatIndex, container) => {
+              const cell = document.createElement('div');
+              cell.className = `beat-cell${beat.bar_start === true || beat.bar_start === undefined && beatIndex % (song.beats_per_bar || 4) === 0 ? ' bar-start' : ''}${beat.rest ? ' rest' : ''}`;
+              if (beat.start_16th !== undefined) cell.dataset.start16th = String(beat.start_16th);
+              const melody = document.createElement('div'); melody.className = 'melody-cell';
+              if (beat.melody_events?.length) renderMelodyNotes(melody, beat.melody_events, song.melody_key, song.melody_tonic_midi, beat.triplet === true);
+              else if (beat.rest) { const rest = document.createElement('span'); rest.className = 'melody-rest'; rest.textContent = '0'; melody.appendChild(rest); }
+              else if (beat.melody_notes?.length) renderMelodyNotes(melody, beat.melody_notes, song.melody_key, song.melody_tonic_midi);
+              else if (beat.melody_hold) { const hold = document.createElement('span'); hold.className = 'melody-hold'; hold.textContent = '—'; melody.appendChild(hold); }
+              else if (beat.melody_gap) { const gap = document.createElement('span'); gap.className = 'melody-gap'; gap.textContent = beat.melody_gap; melody.appendChild(gap); }
+              const chords = document.createElement('div'); chords.className = 'chords';
+              if (beat.chord_units?.length) { chords.classList.add('positioned-chords'); renderPositionedChords(chords, beat.chord_units); }
+              else renderChordLabels(chords, chordLabels(beat), ' · ');
+              const chordTarget = {node: chords, item: beat, separator: ' · ', labels: chordLabels(beat), keyChange: null};
+              if (beat.melody_key_change) {
+                const change = document.createElement('span'); change.className = 'melody-key-change';
+                change.textContent = beat.melody_key_change; chords.prepend(change);
+                chordTarget.keyChange = change;
+              }
+              if (Object.values(beat.chord_modes || {}).some((labels) => labels.length)
+                  || beat.chords?.length) state.chordTargets.push(chordTarget);
+              const lyrics = document.createElement('div'); lyrics.className = 'lyrics';
+              const units = beat.lyric_units || [];
+              const anchored = units.length && units.every((unit) => unit.start_16th !== undefined)
+                && new Set(units.map((unit) => unit.start_16th)).size === units.length;
+              if (anchored) {
+                lyrics.classList.add('positioned-lyrics');
+                units.forEach((unit) => {
+                  const token = document.createElement('span'); token.className = 'lyric-unit';
+                  token.dataset.start16th = String(unit.start_16th); token.textContent = unit.text;
+                  lyrics.appendChild(token);
+                });
+              } else lyrics.textContent = beat.lyrics || '';
+              if (hasMelody) cell.append(chords, melody, lyrics);
+              else cell.append(chords, lyrics);
+              container.appendChild(cell);
+            };
+            let beatIndex = 0;
+            data.bars.forEach((bar) => {
+              const measure = document.createElement('div');
+              measure.className = 'bar-measure';
+              measure.style.setProperty('--bar-beats', String(Math.max(1, bar.beats.length)));
+              if (bar.meter) {
+                measure.dataset.meter = bar.meter_uncertain ? `${bar.meter}?` : bar.meter;
+                if (bar.meter_uncertain) measure.title = '拍号待校';
+                const meter = document.createElement('span'); meter.className = 'meter-label';
+                meter.textContent = measure.dataset.meter;
+                meter.setAttribute('aria-label', `拍号 ${measure.dataset.meter}`);
+                measure.appendChild(meter);
+              }
+              bar.beats.forEach((beat) => appendBeat(beat, beatIndex++, measure));
+              grid.appendChild(measure);
+              rowMeasures.push(measure);
+            });
+            row.appendChild(grid);
+          } else {
+            const chords = document.createElement('div'); chords.className = 'line-chords'; renderChordLabels(chords, chordLabels(data), '  ');
+            if (Object.values(data.chord_modes || {}).some((labels) => labels.length)
+                || data.chords?.length) {
+              state.chordTargets.push({node: chords, item: data, separator: '  ', labels: chordLabels(data), keyChange: null});
+            }
+            row.appendChild(chords);
+            if (data.melody_notes?.length) {
+              const melody = document.createElement('div'); melody.className = 'melody-cell';
+              renderMelodyNotes(melody, data.melody_notes, song.melody_key, song.melody_tonic_midi); row.appendChild(melody);
+            }
+            const lyrics = document.createElement('div'); lyrics.className = 'line-lyrics'; lyrics.textContent = data.lyrics || '';
+            row.appendChild(lyrics);
+          }
+          fragment.appendChild(row);
+          state.measures.push(rowMeasures);
+        });
+        elements.score.appendChild(fragment);
+        scheduleScoreLayout();
+      };
+      window.dxBandGetPrintSnapshot = () => ({song: state.song, display: state.display, chordMode});
+      window.dxBandPdfReady = () => {
+        if (!isPdfPage || !state.song?.rows?.length || !state.renderRows.length) return false;
+        refreshScoreLayout();
+        return true;
+      };
+      const exportPdf = () => {
+        if (!state.song?.rows?.length || pdfExporting) {
+          if (!state.song?.rows?.length) toast('当前没有可导出的谱面');
+          return;
+        }
+        if (isLocalDisplay) { location.hash = 'dx-export-pdf'; return; }
+        const url = new URL(location.href);
+        url.hash = '';
+        url.searchParams.set('pdf', '1');
+        url.searchParams.set('offline', '1');
+        if (!window.open(url.toString(), '_blank')) toast('浏览器阻止了导出页面，请允许弹出窗口');
+      };
+      const renderGuide = () => {
+        const total = Math.max(0, Number(state.guide.total || 0));
+        const remaining = Math.min(total, Math.max(0, Number(state.guide.remaining || 0)));
+        elements.guide.hidden = !remaining || !total;
+        if (!remaining || !total) return;
+        elements.guideRemaining.textContent = String(remaining);
+        elements.guideDots.innerHTML = '';
+        const current = total - remaining;
+        const barSize = Math.max(1, Math.floor(total / 2));
+        for (let index = 0; index < total; index += 1) {
+          const dot = document.createElement('i');
+          dot.className = `guide-dot${index < current ? ' elapsed' : ''}${index === current ? ' current' : ''}${index === barSize ? ' new-bar' : ''}`;
+          elements.guideDots.appendChild(dot);
+        }
+      };
+      const guideIsActive = () => Number(state.guide.remaining || 0) > 0 && Number(state.guide.total || 0) > 0;
+      const setAutoFollow = (enabled) => {
+        autoFollow = enabled;
+        elements.followPlayback.hidden = enabled || !state.song?.rows?.length;
+      };
+      const pauseAutoFollow = () => {
+        if (!isPdfPage && state.song?.rows?.length) setAutoFollow(false);
+      };
+      const animate = (now) => {
+        requestAnimationFrame(animate);
+        if (now - lastAnimationAt < 33) return;
+        lastAnimationAt = now;
+        const transportPosition = position() + Number(state.display.offset_ms || 0);
+        const labels = { playing: '播放中', paused: '已暂停', stopped: '已停止', ended: '已结束', empty: '等待' };
+        const transportText = `${formatTime(transportPosition)} · ${labels[state.transport.state] || state.transport.state}`;
+        if (transportText !== lastTransportText) {
+          elements.transport.textContent = transportText;
+          lastTransportText = transportText;
+        }
+        if (state.song && state.renderRows.length && state.rows.length) {
+          const countInActive = guideIsActive();
+          const scorePosition = countInActive ? Number(state.renderRows[0].start_ms || 0) : transportPosition;
+          let index = 0;
+          for (let i = state.renderRows.length - 1; i >= 0; i -= 1) { if (Number(state.renderRows[i].start_ms) <= scorePosition) { index = i; break; } }
+          const current = state.renderRows[index]; const nextTop = state.rowTops[index + 1] ?? (state.rowTops[index] + state.rowHeights[index]);
+          const measureIndex = current.bars?.findIndex((bar) => scorePosition < Number(bar.end_ms)) ?? -1;
+          const nextMeasure = isPdfPage ? null : (state.measures[index]?.[measureIndex < 0 ? current.bars?.length - 1 : measureIndex] || null);
+          if (nextMeasure !== activeMeasure) {
+            activeMeasure?.classList.remove('active');
+            nextMeasure?.classList.add('active');
+            activeMeasure = nextMeasure;
+          }
+          const span = Math.max(1, Number(current.end_ms) - Number(current.start_ms));
+          const progress = countInActive ? 0 : clamp((scorePosition - Number(current.start_ms)) / span, 0, 1);
+          const scoreY = state.rowTops[index] + (nextTop - state.rowTops[index]) * progress;
+          if (autoFollow) {
+            const target = state.stageHeight * .34;
+            const desiredScroll = Math.max(0, Math.round(scoreY - target));
+            if (Math.abs(elements.stage.scrollTop - desiredScroll) >= 1) {
+              elements.stage.scrollTop = desiredScroll;
+            }
+          }
+        }
+      };
+      const setConnected = (connected) => {
+        elements.status.classList.toggle('offline', !connected);
+        elements.status.querySelector('span').textContent = connected ? '已连接' : '重连中';
+      };
+      const applySnapshot = (payload) => {
+        state.song = payload.song; state.display = payload.display || state.display;
+        setAutoFollow(true);
+        if (!chordMode) chordMode = state.display.chord_mode;
+        chordMode = normalizedChordMode(resolveLegacyMode(chordMode, state.song));
+        updateKeyOptions();
+        state.guide = payload.guide || state.guide; state.transport = payload.transport || state.transport;
+        state.receivedAt = performance.now(); renderSong(); renderGuide();
+      };
+      if (isOfflinePdfPage) {
+        const snapshot = window.opener?.dxBandGetPrintSnapshot?.();
+        if (snapshot?.song?.rows?.length) {
+          chordMode = normalizedChordMode(snapshot.chordMode);
+          applySnapshot(snapshot);
+          Promise.all([
+            document.fonts.ready,
+            ...Array.from(document.images).map((image) => image.decode?.().catch(() => {})),
+          ]).then(() => new Promise(requestAnimationFrame)).then(() => {
+            refreshScoreLayout();
+            window.print();
+          });
+        }
+        window.addEventListener('afterprint', () => window.close());
+      } else {
+        const source = new EventSource(`/events${isLocalDisplay ? '?local=1' : ''}`);
+        source.addEventListener('open', () => setConnected(true));
+        source.addEventListener('error', () => setConnected(false));
+        source.addEventListener('snapshot', (event) => applySnapshot(JSON.parse(event.data)));
+        source.addEventListener('song', (event) => {
+          state.song = JSON.parse(event.data);
+          setAutoFollow(true);
+          updateKeyOptions();
+          renderSong();
+        });
+        source.addEventListener('display', (event) => { state.display = JSON.parse(event.data); });
+        source.addEventListener('guide', (event) => { state.guide = JSON.parse(event.data); renderGuide(); });
+        source.addEventListener('transport', (event) => { state.transport = JSON.parse(event.data); state.receivedAt = performance.now(); });
+      }
+      $('smaller').addEventListener('click', () => { fontScale -= .1; applyFontScale(); });
+      $('larger').addEventListener('click', () => { fontScale += .1; applyFontScale(); });
+      elements.fullscreen.addEventListener('click', toggleFullscreen);
+      elements.exportPdf.addEventListener('click', exportPdf);
+      elements.followPlayback.addEventListener('click', () => setAutoFollow(true));
+      const scrollFromRail = (clientY) => {
+        if (!scrollDragMetrics) return;
+        const fraction = clamp((clientY - scrollDragMetrics.top - scrollDragOffset) / scrollDragMetrics.travel, 0, 1);
+        elements.stage.scrollTop = fraction * scrollDragMetrics.maxScroll;
+        scheduleScrollThumbUpdate();
+      };
+      elements.scrollRail.addEventListener('pointerdown', (event) => {
+        if (elements.scrollRail.hidden) return;
+        event.preventDefault();
+        pauseAutoFollow();
+        const thumb = elements.scrollThumb.getBoundingClientRect();
+        scrollDragOffset = event.target === elements.scrollThumb ? event.clientY - thumb.top : thumb.height / 2;
+        const rail = elements.scrollRail.getBoundingClientRect();
+        scrollDragMetrics = {
+          top: rail.top,
+          travel: Math.max(1, scrollRailMetrics.travel),
+          maxScroll: scrollRailMetrics.maxScroll,
+        };
+        elements.scrollRail.setPointerCapture(event.pointerId);
+        scrollFromRail(event.clientY);
+      });
+      elements.scrollRail.addEventListener('pointermove', (event) => {
+        if (scrollDragOffset !== null) scrollFromRail(event.clientY);
+      });
+      const endScrollDrag = () => { scrollDragOffset = null; scrollDragMetrics = null; };
+      elements.scrollRail.addEventListener('pointerup', endScrollDrag);
+      elements.scrollRail.addEventListener('pointercancel', endScrollDrag);
+      elements.scrollRail.addEventListener('keydown', (event) => {
+        const steps = { ArrowUp: -80, ArrowDown: 80, PageUp: -elements.stage.clientHeight, PageDown: elements.stage.clientHeight };
+        if (event.key in steps) {
+          event.preventDefault(); pauseAutoFollow(); elements.stage.scrollTop += steps[event.key];
+        } else if (event.key === 'Home' || event.key === 'End') {
+          event.preventDefault(); pauseAutoFollow();
+          elements.stage.scrollTop = event.key === 'Home' ? 0 : elements.stage.scrollHeight;
+        }
+      });
+      elements.stage.addEventListener('wheel', pauseAutoFollow, {passive: true});
+      elements.stage.addEventListener('touchstart', pauseAutoFollow, {passive: true});
+      elements.stage.addEventListener('pointerdown', pauseAutoFollow);
+      elements.stage.addEventListener('keydown', (event) => {
+        if (['ArrowUp', 'ArrowDown', 'PageUp', 'PageDown', 'Home', 'End', ' '].includes(event.key)) pauseAutoFollow();
+      });
+      elements.stage.addEventListener('scroll', () => {
+        scheduleScrollThumbUpdate();
+        scheduleVisibleScoreLayout();
+      }, {passive: true});
+      document.addEventListener('fullscreenchange', updateFullscreenControl);
+      document.querySelectorAll('[data-chord-mode]').forEach((button) => {
+        button.addEventListener('click', () => {
+          switchChordMode(button.dataset.chordMode);
+          toast('和弦模式：级数');
+        });
+      });
+      $('chordKeySelect').addEventListener('change', (event) => {
+        switchChordMode(event.target.value);
+        toast(`和弦模式：${event.target.selectedOptions[0]?.textContent || chordMode}`);
+      });
+      $('chordKeySelect').addEventListener('pointerdown', (event) => {
+        if (chordMode !== 'degree') return;
+        switchChordMode(event.currentTarget.value);
+      });
+      $('chordKeySelect').addEventListener('keydown', (event) => {
+        if (chordMode === 'degree' && ['Enter', ' ', 'ArrowDown'].includes(event.key)) {
+          switchChordMode(event.currentTarget.value);
+        }
+      });
+      let lastViewportWidth = window.innerWidth;
+      window.addEventListener('resize', () => {
+        const widthChanged = window.innerWidth !== lastViewportWidth;
+        lastViewportWidth = window.innerWidth;
+        if (state.song && (widthChanged || responsiveBarsPerRow() !== state.barsPerRow)) renderSong();
+        else requestAnimationFrame(measureRows);
+      });
+      updateChordModeControl(); updateFullscreenControl(); applyFontScale(); if (!isPdfPage) requestAnimationFrame(animate);
+    })();
+  </script>
+</body>
+</html>

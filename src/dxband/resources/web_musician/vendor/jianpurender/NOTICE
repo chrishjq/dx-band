@@ -1,0 +1,7 @@
+JianpuRender 1.8.1
+Source: https://github.com/flufy3d/JianpuRender
+Package: https://www.npmjs.com/package/jianpurender
+License: Apache-2.0 (see LICENSE)
+Vendored file: dist/jianpurender.js from the official npm package jianpurender@1.8.1
+Modification: none; the vendored JavaScript and LICENSE match the npm package byte-for-byte.
+SHA-256 (jianpurender.js): c1fde61d891ef3a061960929135f9f45d9a313901cdd0a2236ede2a87df99776

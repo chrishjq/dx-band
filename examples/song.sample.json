@@ -1,0 +1,88 @@
+{
+  "schema_version": 3,
+  "song_id": "20260930-193000-a1b2c3d4",
+  "title": "示例歌曲",
+  "artist": "示例歌手",
+  "language": "zh-CN",
+  "created_at": "2026-09-30T19:30:00+08:00",
+  "duration_ms": 10000,
+  "source": {
+    "original_filename": "example.mp3",
+    "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "original_copied": false,
+    "lrc_filename": "example.lrc",
+    "lrc_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+  },
+  "separation": {
+    "engine": "demucs",
+    "model": "htdemucs_6s",
+    "demucs_version": "4.1.0",
+    "device": "mps",
+    "output_format": "mp3",
+    "bitrate_kbps": 320,
+    "mp3_preset": 2
+  },
+  "audio": {
+    "sample_rate_hz": 44100,
+    "channels": 2,
+    "canonical_frames": 441000,
+    "tracks": {
+      "vocals": {
+        "file": "vocals.mp3",
+        "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+        "duration_ms": 10000,
+        "trim_start_frames": 0,
+        "pad_end_frames": 0
+      },
+      "drums": {
+        "file": "drums.mp3",
+        "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+        "duration_ms": 10000,
+        "trim_start_frames": 0,
+        "pad_end_frames": 0
+      },
+      "bass": {
+        "file": "bass.mp3",
+        "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+        "duration_ms": 10000,
+        "trim_start_frames": 0,
+        "pad_end_frames": 0
+      },
+      "guitar": {
+        "file": "guitar.mp3",
+        "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+        "duration_ms": 10000,
+        "trim_start_frames": 0,
+        "pad_end_frames": 0
+      },
+      "piano": {
+        "file": "piano.mp3",
+        "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+        "duration_ms": 10000,
+        "trim_start_frames": 0,
+        "pad_end_frames": 0
+      },
+      "other": {
+        "file": "other.mp3",
+        "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+        "duration_ms": 10000,
+        "trim_start_frames": 0,
+        "pad_end_frames": 0
+      }
+    }
+  },
+  "musical": {
+    "original_key": "C",
+    "bpm": 120,
+    "beat_times_ms": [0, 500, 1000, 1500],
+    "downbeat_times_ms": [0],
+    "beats_per_bar": 4
+  },
+  "lyrics": {
+    "file": "lyrics.json",
+    "source": "lrc",
+    "verified": true,
+    "verified_at": "2026-09-30T19:50:00+08:00",
+    "language": "zh-CN"
+  }
+}

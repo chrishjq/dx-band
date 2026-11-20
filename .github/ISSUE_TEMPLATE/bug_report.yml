@@ -1,0 +1,37 @@
+name: 缺陷报告
+description: 报告可复现的程序问题
+title: "[Bug] "
+labels: [bug]
+body:
+  - type: textarea
+    id: summary
+    attributes:
+      label: 问题与预期结果
+      description: 说明实际发生了什么，以及你期望发生什么。
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: 复现步骤
+      description: 请使用有权公开的样本；不要粘贴歌曲、歌词、令牌或客户资料。
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: DX Band 版本或提交号
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: 操作系统与硬件
+      placeholder: macOS 版本与芯片型号
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: 已脱敏日志或截图
+      description: 发布前请移除个人信息、局域网地址和私有路径。

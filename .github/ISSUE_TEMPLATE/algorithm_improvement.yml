@@ -1,0 +1,31 @@
+name: 算法改进
+description: 提议节拍、和弦、旋律或歌词对齐改进
+title: "[Analysis] "
+labels: [enhancement]
+body:
+  - type: dropdown
+    id: area
+    attributes:
+      label: 改进范围
+      options: [节拍与小节, 和弦, 旋律与谱面, 歌词对齐, 六轨播放与同步, 其他]
+    validations:
+      required: true
+  - type: textarea
+    id: current
+    attributes:
+      label: 当前结果与复现方法
+      description: 尽量给出可公开、可重复的最小输入。
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: 期望结果与评价方法
+      description: 写明怎样判断改进有效，以及是否会影响其他歌曲。
+    validations:
+      required: true
+  - type: textarea
+    id: rights
+    attributes:
+      label: 样本与模型许可
+      description: 说明分享输入、歌词、模型或输出的权利；不能公开时描述合成样本方案。

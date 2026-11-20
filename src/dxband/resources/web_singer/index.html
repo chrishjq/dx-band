@@ -1,0 +1,151 @@
+<!doctype html>
+<!-- SPDX-FileCopyrightText: 2026 DX Band -->
+<!-- SPDX-License-Identifier: GPL-3.0-only -->
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#000000">
+  <title>DX Band 歌手屏</title>
+  <style>
+    :root { color-scheme: dark; --font-size: 42px; }
+    * { box-sizing: border-box; }
+    html, body { width: 100%; height: 100%; margin: 0; background: #000; color: #fff; }
+    body { font-family: "PingFang SC", "Microsoft YaHei", sans-serif; overflow: hidden; }
+    #info { position: absolute; top: max(22px, env(safe-area-inset-top)); left: 30px; right: 200px; color: #fff; font-size: clamp(15px, calc(var(--font-size) * .43), 28px); font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    #countdown { position: absolute; top: max(22px, env(safe-area-inset-top)); right: 30px; color: #888; font-size: clamp(15px, calc(var(--font-size) * .43), 28px); font-weight: 600; }
+    #lyrics { height: 100dvh; padding: 0 5vw; }
+    .line { position: absolute; top: calc(var(--row) * 25%); left: 5vw; right: 5vw; transform: translateY(-50%); text-align: center; font-size: max(18px, calc(var(--font-size) * .72)); line-height: 1.5; color: #fff; overflow-wrap: anywhere; }
+    .line.previous { color: #888; }
+    .line.current { color: #ffd34e; font-size: var(--font-size); font-weight: 700; }
+    #display-controls { position: fixed; z-index: 10; right: max(16px, env(safe-area-inset-right)); bottom: max(16px, env(safe-area-inset-bottom)); display: flex; gap: 8px; opacity: .45; transition: opacity .15s; }
+    #display-controls:hover, #display-controls:focus-within { opacity: 1; }
+    #display-controls button { min-width: 44px; height: 44px; padding: 0 10px; border: 1px solid #555; border-radius: 9px; background: #171717; color: #fff; font-family: inherit; font-size: 19px; font-weight: 600; cursor: pointer; touch-action: manipulation; }
+    #display-controls button:focus-visible { outline: 2px solid #ffd34e; }
+    #info-toggle { font-size: 14px !important; }
+    #empty { position: absolute; top: 50%; left: 0; right: 0; transform: translateY(-50%); text-align: center; color: #888; font-size: 24px; }
+    @media (max-width: 600px) { #info { left: 18px; right: 120px; } #countdown { right: 18px; } .line { left: 18px; right: 18px; } }
+  </style>
+</head>
+<body>
+  <div id="info"></div>
+  <div id="countdown"></div>
+  <main id="lyrics"><div id="empty">等待歌曲加载</div></main>
+  <div id="display-controls" aria-label="歌手屏显示设置">
+    <button id="smaller" type="button" aria-label="减小字号">A−</button>
+    <button id="larger" type="button" aria-label="增大字号">A＋</button>
+    <button id="info-toggle" type="button" aria-pressed="true">隐藏歌曲信息</button>
+  </div>
+  <script>
+    const state = {song: null, display: {offset_ms: 0, font_size: 42, music_info_visible: true}, transport: {state: 'empty', position_ms: 0}};
+    let receivedAt = performance.now();
+    const info = document.getElementById('info');
+    const countdown = document.getElementById('countdown');
+    const lyrics = document.getElementById('lyrics');
+    const infoToggle = document.getElementById('info-toggle');
+    const fontStorageKey = 'dx-band-singer-font-size';
+    const storedFontSize = Number(localStorage.getItem(fontStorageKey));
+    let localFontSize = Number.isFinite(storedFontSize) && storedFontSize >= 24 ? storedFontSize : null;
+    const infoStorageKey = 'dx-band-singer-info-visible';
+    const storedInfoVisible = localStorage.getItem(infoStorageKey);
+    let localInfoVisible = storedInfoVisible === null ? null : storedInfoVisible === 'true';
+    let lastServerInfoVisible = null;
+    let lastSignature = '';
+
+    function musicInfoVisible() {
+      return localInfoVisible ?? !!state.display.music_info_visible;
+    }
+
+    function setLocalInfoVisible(visible) {
+      localInfoVisible = !!visible;
+      localStorage.setItem(infoStorageKey, String(localInfoVisible));
+      lastSignature = '';
+      render();
+    }
+
+    infoToggle.addEventListener('click', () => setLocalInfoVisible(!musicInfoVisible()));
+    window.dxBandSetSingerInfoVisible = setLocalInfoVisible;
+
+    function effectiveFontSize() {
+      return Math.max(24, Math.min(240, localFontSize ?? Number(state.display.font_size || 42)));
+    }
+
+    function setLocalFontSize(size) {
+      localFontSize = Math.max(24, Math.min(240, Math.round(size)));
+      localStorage.setItem(fontStorageKey, String(localFontSize));
+      lastSignature = '';
+      render();
+    }
+
+    document.getElementById('smaller').addEventListener('click', () => setLocalFontSize(effectiveFontSize() - 4));
+    document.getElementById('larger').addEventListener('click', () => setLocalFontSize(effectiveFontSize() + 4));
+    window.dxBandSetSingerFontSize = setLocalFontSize;
+
+    function position() {
+      const elapsed = state.transport.state === 'playing' ? performance.now() - receivedAt : 0;
+      return Math.max(0, state.transport.position_ms + elapsed + (state.display.offset_ms || 0));
+    }
+
+    function render() {
+      const song = state.song;
+      const lines = song?.lines || [];
+      const at = position();
+      let candidate = -1;
+      for (let i = 0; i < lines.length && lines[i].start_ms <= at; i++) candidate = i;
+      let current = -1, previous = -1, next = -1;
+      if (candidate >= 0) {
+        const following = candidate + 1 < lines.length ? candidate + 1 : -1;
+        if (at < lines[candidate].end_ms || (following >= 0 && at < lines[following].start_ms)) {
+          current = candidate; previous = candidate - 1; next = following;
+        } else { previous = candidate; next = following; }
+      } else if (lines.length) next = 0;
+      const start = Math.min(Math.max(0, current >= 0 ? current - 1 : next >= 0 ? next : previous - 2), Math.max(0, lines.length - 3));
+      const showInfo = musicInfoVisible();
+      const seconds = next >= 0 ? Math.max(0, Math.ceil((lines[next].start_ms - at) / 1000)) : null;
+      const signature = [start, current, previous, next, seconds, song, showInfo, effectiveFontSize()];
+      if (String(signature) === lastSignature) return;
+      lastSignature = String(signature);
+      document.documentElement.style.setProperty('--font-size', `${effectiveFontSize()}px`);
+      const parts = song ? [song.title, song.artist, song.original_key && song.bpm ? `原KEY ${song.original_key} · ${song.bpm} BPM` : ''].filter(Boolean) : [];
+      info.textContent = showInfo ? parts.join(' · ') : '';
+      infoToggle.textContent = showInfo ? '隐藏歌曲信息' : '显示歌曲信息';
+      infoToggle.setAttribute('aria-pressed', String(showInfo));
+      countdown.textContent = seconds === null ? '' : `${seconds} 秒下句`;
+      lyrics.replaceChildren();
+      if (!lines.length) {
+        const empty = document.createElement('div'); empty.id = 'empty'; empty.textContent = '等待歌曲加载'; lyrics.append(empty);
+      } else {
+        lines.slice(start, start + 3).forEach((line, offset) => {
+          const index = start + offset;
+          const node = document.createElement('div');
+          node.className = 'line' + (index === current ? ' current' : index < current || (current < 0 && index <= previous) ? ' previous' : '');
+          node.style.setProperty('--row', String(offset + 1));
+          node.textContent = line.text;
+          lyrics.append(node);
+        });
+      }
+    }
+
+    const events = new EventSource(`/events${new URLSearchParams(location.search).get('local') === '1' ? '?local=1' : ''}`);
+    for (const key of ['snapshot', 'song', 'display', 'transport']) {
+      events.addEventListener(key, event => {
+        const value = JSON.parse(event.data);
+        if (key === 'snapshot') Object.assign(state, value);
+        else state[key] = value;
+        if (key === 'snapshot' || key === 'display') {
+          const serverInfoVisible = !!state.display.music_info_visible;
+          if (lastServerInfoVisible !== null && lastServerInfoVisible !== serverInfoVisible) {
+            localInfoVisible = null;
+            localStorage.removeItem(infoStorageKey);
+          }
+          lastServerInfoVisible = serverInfoVisible;
+        }
+        if (key === 'transport' || key === 'snapshot') receivedAt = performance.now();
+        lastSignature = '';
+        render();
+      });
+    }
+    setInterval(render, 100);
+  </script>
+</body>
+</html>

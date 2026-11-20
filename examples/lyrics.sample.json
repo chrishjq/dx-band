@@ -1,0 +1,31 @@
+{
+  "schema_version": 1,
+  "title": "示例歌曲",
+  "language": "zh-CN",
+  "timing_mode": "word",
+  "lines": [
+    {
+      "id": "line-0001",
+      "start_ms": 1000,
+      "end_ms": 4300,
+      "text": "这是第一句示例歌词",
+      "words": [
+        {
+          "text": "这是",
+          "start_ms": 1000,
+          "end_ms": 1700
+        },
+        {
+          "text": "第一句",
+          "start_ms": 1700,
+          "end_ms": 3000
+        },
+        {
+          "text": "示例歌词",
+          "start_ms": 3000,
+          "end_ms": 4300
+        }
+      ]
+    }
+  ]
+}
