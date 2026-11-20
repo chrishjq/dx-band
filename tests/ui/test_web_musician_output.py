@@ -22,6 +22,51 @@ from dxband.ui.services.screen_manager import ScreenManager
 from dxband.ui.services.settings_service import SettingsService
 
 
+def test_web_musician_uses_english_controls(qtbot: QtBot) -> None:
+    server = WebMusicianServer(language="en")
+    server.start(preferred_port=0)
+    browser = QWebEngineView()
+    qtbot.addWidget(browser)
+    browser.show()
+    assert server.local_url is not None
+    browser.setUrl(QUrl(server.local_url))
+    readings: list[object] = []
+
+    def read() -> dict[str, object] | None:
+        browser.page().runJavaScript(
+            "JSON.stringify({lang: document.documentElement?.lang, title: document.title, "
+            "empty: document.querySelector('#empty')?.textContent, "
+            "status: document.querySelector('#status span')?.textContent, "
+            "fullscreen: document.querySelector('#fullscreen')?.textContent})",
+            readings.append,
+        )
+        value = readings.pop(0) if readings else None
+        return json.loads(value) if isinstance(value, str) and value else None
+
+    try:
+        qtbot.waitUntil(
+            lambda: (value := read()) is not None
+            and value.get("lang") == "en"
+            and value.get("title") == "DX Band Musician Screen"
+            and "Waiting for a song" in str(value.get("empty"))
+            and value.get("status") == "Connected"
+            and value.get("fullscreen") == "Full screen",
+            timeout=10000,
+        )
+        server.set_language("zh")
+        qtbot.waitUntil(
+            lambda: (value := read()) is not None
+            and value.get("lang") == "zh-CN"
+            and "等待歌曲" in str(value.get("empty"))
+            and value.get("status") == "已连接"
+            and value.get("fullscreen") == "全屏",
+            timeout=10000,
+        )
+    finally:
+        browser.close()
+        server.stop()
+
+
 def test_web_musician_button_starts_and_stops_local_server(
     qtbot: QtBot,
     monkeypatch: MonkeyPatch,

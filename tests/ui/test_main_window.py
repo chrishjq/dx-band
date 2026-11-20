@@ -3,44 +3,66 @@
 
 from pathlib import Path
 
-from PySide6.QtCore import QCoreApplication, QEvent, Qt
+from PySide6.QtCore import QCoreApplication, QEvent, QSettings, Qt
 from PySide6.QtGui import QImage
-from PySide6.QtWidgets import QApplication, QLabel, QLineEdit, QMessageBox
+from PySide6.QtWidgets import QApplication, QLabel, QLineEdit
 from pytest import MonkeyPatch
 from pytestqt.qtbot import QtBot
 
 from dxband import __version__
+from dxband.constants import TrackKind
+from dxband.ui import main_window
 from dxband.ui.branding import APP_ICON_PATH
+from dxband.ui.i18n import UiTranslator
 from dxband.ui.main_window import MainWindow
 from dxband.ui.render.web_musician_window import WebMusicianWindow
+from dxband.ui.services.settings_service import SettingsService
 
 
-def test_chord_backfill_prompt_starts_batch_and_progress(
-    qtbot: QtBot, monkeypatch: MonkeyPatch
+def test_language_changes_immediately_without_restart(
+    qtbot: QtBot, monkeypatch: MonkeyPatch, tmp_path: Path
 ) -> None:
-    window = MainWindow()
+    application = QApplication.instance()
+    assert isinstance(application, QApplication)
+    service = SettingsService(QSettings(str(tmp_path / "language.ini"), QSettings.Format.IniFormat))
+    monkeypatch.setattr(main_window, "SettingsService", lambda: service)
+    translator = UiTranslator(application)
+    window = MainWindow(translator=translator)
     qtbot.addWidget(window)
-    missing = (object(), object())
-    started: list[object] = []
-    monkeypatch.setattr(
-        window.library_controller, "missing_chord_packages", lambda: missing
-    )
-    monkeypatch.setattr(
-        window.library_controller,
-        "start_chord_backfill",
-        lambda packages: started.append(packages) or True,
-    )
-    monkeypatch.setattr(
-        QMessageBox,
-        "question",
-        lambda *_args: QMessageBox.StandardButton.Yes,
-    )
+    window.show()
+    translator.set_language("zh")
 
-    window.settings_page.chord_fill_button.click()
+    window.settings_page.language_combo.setCurrentIndex(
+        window.settings_page.language_combo.findData("en")
+    )
+    assert service.load_language() == "en"
+    assert window.navigation.item(0).text() == "Playback"
+    assert window.brand_subtitle.text() == "Power by Siwen"
+    assert window.playback_page.track_checks[TrackKind.VOCALS].label == "Vocals"
+    assert window.playback_page.audience_output_button.label == "Audience"
+    assert window.playback_page.current_lyric_label.text() == "Current: —"
+    assert window.playback_controller._web_singer_server._state["language"] == "en"
+    window.playback_page.set_empty_playlist()
+    translator.translate_all()
+    assert window.playback_page.song_label.text() == "The playlist is empty; add a song first"
+    window.playback_page.set_song("歌词", "", 1000)
+    translator.translate_all()
+    assert window.playback_page.song_label.text() == "歌词"
+    window.playback_page.music_info_label.setText("原KEY Fm  ·  63 BPM")
+    translator.translate_all()
+    assert window.playback_page.music_info_label.text() == "Original key Fm · 63 BPM"
 
-    assert started == [missing]
-    assert window.settings_page.chord_fill_progress.maximum() == 2
-    assert window.settings_page.chord_fill_progress.value() == 0
+    window.settings_page.language_combo.setCurrentIndex(
+        window.settings_page.language_combo.findData("zh")
+    )
+    assert service.load_language() == "zh"
+    assert window.navigation.item(0).text() == "播放控制"
+    assert window.brand_subtitle.text() == "大象乐队工作站"
+    assert window.playback_page.track_checks[TrackKind.VOCALS].label == "人声"
+    assert window.playback_page.audience_output_button.label == "观众"
+    assert window.playback_page.current_lyric_label.text() == "当前句：—"
+    assert window.playback_page.song_label.text() == "歌词"
+    assert window.playback_page.music_info_label.text() == "原KEY Fm  ·  63 BPM"
 
 
 def test_main_window_opens_playback_with_embedded_playlist(qtbot: QtBot) -> None:

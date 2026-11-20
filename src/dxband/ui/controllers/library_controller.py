@@ -50,8 +50,6 @@ class LibraryController(QObject):
     song_load_failed = Signal(str)
     song_lyrics_updated = Signal(object)
     song_chords_updated = Signal(object)
-    chord_batch_progress = Signal(int, int, str)
-    chord_batch_finished = Signal(int, int, object)
 
     def __init__(
         self,
@@ -71,7 +69,6 @@ class LibraryController(QObject):
         self._edit_engine: StemMixerEngine | None = None
         self._edit_dialog: SongEditDialog | None = None
         self._editing_package: SongPackage | None = None
-        self._chord_batch_running = False
         self._messages: queue.SimpleQueue[tuple[str, Any]] = queue.SimpleQueue()
         self._timer = QTimer(self)
         self._timer.setInterval(40)
@@ -85,45 +82,6 @@ class LibraryController(QObject):
         self.page.edit_requested.connect(self._edit_song)
         self.page.delete_requested.connect(self._delete)
         self.refresh()
-
-    def missing_chord_packages(self) -> tuple[SongPackage, ...]:
-        """Return valid library songs whose chord data is absent or invalid."""
-        return tuple(song for song in self.service.scan().songs if song.chords is None)
-
-    def start_chord_backfill(self, packages: tuple[SongPackage, ...]) -> bool:
-        """Analyze and save missing chords without opening the song editor."""
-        if self._chord_batch_running or not packages:
-            return False
-        self._chord_batch_running = True
-        threading.Thread(
-            target=self._backfill_chords_in_background,
-            args=(packages,),
-            name="library-chord-backfill",
-            daemon=True,
-        ).start()
-        return True
-
-    def _backfill_chords_in_background(self, packages: tuple[SongPackage, ...]) -> None:
-        total = len(packages)
-        succeeded = 0
-        failures: list[str] = []
-        try:
-            for index, package in enumerate(packages, start=1):
-                self.chord_batch_progress.emit(index - 1, total, package.config.title)
-                try:
-                    timeline = self._recognize_chords(package)
-                    updated = self.service.update_chords(package, timeline)
-                    succeeded += 1
-                    self.song_chords_updated.emit(updated)
-                except Exception as exc:
-                    failures.append(
-                        f"{package.config.title}："
-                        f"{public_message(str(exc), '和弦识别失败，请重试')}"
-                    )
-                self.chord_batch_progress.emit(index, total, package.config.title)
-        finally:
-            self._chord_batch_running = False
-            self.chord_batch_finished.emit(succeeded, len(failures), tuple(failures))
 
     def refresh(self, query: str | None = None) -> None:
         try:

@@ -155,7 +155,7 @@ class _RequestHandler(BaseHTTPRequestHandler):
 class WebMusicianServer:
     """Serve the musician view; accept settings changes only from loopback."""
 
-    def __init__(self, page_path: Path | None = None) -> None:
+    def __init__(self, page_path: Path | None = None, *, language: str = "zh") -> None:
         self._page_path = page_path or WEB_MUSICIAN_ROOT / "index.html"
         self.page_bytes = self._page_path.read_bytes()
         self.jianpurender_bytes = (
@@ -169,6 +169,7 @@ class WebMusicianServer:
         self.on_local_chord_mode: Callable[[str], None] | None = None
         self._state: dict[str, object] = {
             "protocol": 1,
+            "language": language if language in {"zh", "en"} else "zh",
             "song": None,
             "display": {
                 "chord_mode": "degree",
@@ -237,6 +238,13 @@ class WebMusicianServer:
 
     def set_song(self, song: dict[str, object] | None) -> None:
         self._set_and_publish("song", song)
+
+    def set_language(self, language: str) -> None:
+        normalized = language if language in {"zh", "en"} else "zh"
+        with self._lock:
+            self._state["language"] = normalized
+            snapshot = json.loads(json.dumps(self._state, ensure_ascii=False))
+        self.publish("snapshot", snapshot)
 
     def set_display(self, *, chord_mode: str, offset_ms: int) -> None:
         self._set_and_publish(

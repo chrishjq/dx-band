@@ -12,6 +12,64 @@ from dxband.ui.render.web_singer_window import WebSingerWindow
 from dxband.ui.services.screen_manager import ScreenManager
 
 
+def test_web_singer_uses_english_controls_and_keeps_lyrics(qtbot: QtBot) -> None:
+    server = WebSingerServer(language="en")
+    server.start(preferred_port=0)
+    server.set_song({
+        "title": "测试歌曲",
+        "artist": "测试歌手",
+        "original_key": "C",
+        "bpm": 120,
+        "lines": [{"id": "line-0001", "start_ms": 0, "end_ms": 1000, "text": "播放"}],
+    })
+    server.set_transport(state="paused", position_ms=200)
+    browser = QWebEngineView()
+    qtbot.addWidget(browser)
+    browser.show()
+    assert server.local_url is not None
+    browser.setUrl(QUrl(server.local_url))
+    readings: list[object] = []
+
+    def read() -> dict[str, object] | None:
+        browser.page().runJavaScript(
+            "JSON.stringify({lang: document.documentElement?.lang, title: document.title, "
+            "button: document.querySelector('#info-toggle')?.textContent, "
+            "info: document.querySelector('#info')?.textContent, "
+            "lyric: document.querySelector('.line.current')?.textContent})",
+            readings.append,
+        )
+        value = readings.pop(0) if readings else None
+        return json.loads(value) if isinstance(value, str) and value else None
+
+    try:
+        qtbot.waitUntil(
+            lambda: (value := read()) is not None
+            and value.get("lang") == "en"
+            and value.get("title") == "DX Band Singer Screen"
+            and value.get("lyric") == "播放",
+            timeout=10000,
+        )
+        browser.page().runJavaScript("window.dxBandSetSingerInfoVisible(true)")
+        qtbot.waitUntil(
+            lambda: (value := read()) is not None
+            and value.get("button") == "Hide song info"
+            and "Original key C" in str(value.get("info")),
+            timeout=10000,
+        )
+        server.set_language("zh")
+        qtbot.waitUntil(
+            lambda: (value := read()) is not None
+            and value.get("lang") == "zh-CN"
+            and value.get("button") == "隐藏歌曲信息"
+            and "原KEY C" in str(value.get("info"))
+            and value.get("lyric") == "播放",
+            timeout=10000,
+        )
+    finally:
+        browser.close()
+        server.stop()
+
+
 def test_web_singer_follows_transport_and_display_settings(qtbot: QtBot) -> None:
     server = WebSingerServer()
     server.start(preferred_port=0)

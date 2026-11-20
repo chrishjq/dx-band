@@ -35,12 +35,12 @@ from dxband.ui.branding import APP_WINDOW_TITLE, application_icon, sidebar_logo
 from dxband.ui.controllers.creation_controller import CreationController
 from dxband.ui.controllers.library_controller import LibraryController
 from dxband.ui.controllers.playback_controller import PlaybackController
+from dxband.ui.i18n import UiTranslator
 from dxband.ui.pages.create_song_page import CreateSongPage
 from dxband.ui.pages.library_page import LibraryPage
 from dxband.ui.pages.playback_page import PlaybackPage
 from dxband.ui.pages.playlist_page import PlaylistPage
 from dxband.ui.pages.settings_page import SettingsPage
-from dxband.ui.public_messages import public_message
 from dxband.ui.services.audience_font_library import AudienceFontLibrary
 from dxband.ui.services.background_video_library import (
     BackgroundVideoLibrary,
@@ -61,8 +61,9 @@ class MainWindow(QMainWindow):
     background_video_imported = Signal(object)
     background_video_import_failed = Signal(str)
 
-    def __init__(self) -> None:
+    def __init__(self, translator: UiTranslator | None = None) -> None:
         super().__init__()
+        self._translator = translator
         self.setWindowTitle(APP_WINDOW_TITLE)
         self.setWindowIcon(application_icon())
         self.resize(1600, 900)
@@ -129,6 +130,7 @@ class MainWindow(QMainWindow):
         self.playlist_page = PlaylistPage(embedded=True)
         self.playback_page = PlaybackPage(self.playlist_page)
         self.settings_page = SettingsPage()
+        self.settings_page.set_language(self.settings_service.load_language())
         page_specs: list[tuple[str, str, QWidget]] = [
             ("播放控制", "playback.svg", self.playback_page),
             ("歌曲库", "library.svg", self.library_page),
@@ -227,12 +229,6 @@ class MainWindow(QMainWindow):
         self.library_controller.song_chords_updated.connect(
             self.playback_controller.update_package_chords
         )
-        self.library_controller.chord_batch_progress.connect(
-            self.settings_page.update_chord_fill
-        )
-        self.library_controller.chord_batch_finished.connect(
-            self._chord_backfill_finished
-        )
         self.playback_controller.song_loaded.connect(self._song_loaded)
         self.playback_controller.song_load_failed.connect(self._song_load_failed)
         self.playback_controller.song_finished.connect(self._song_finished)
@@ -242,7 +238,7 @@ class MainWindow(QMainWindow):
         self.playback_page.auto_play_next_changed.connect(self._set_auto_play_next)
         self.playback_page.set_auto_play_next(self.settings_service.load_auto_play_next())
         self.settings_page.save_requested.connect(self._save_settings)
-        self.settings_page.chord_backfill_requested.connect(self._offer_chord_backfill)
+        self.settings_page.language_changed.connect(self._save_language)
         self.playback_page.background_video_settings_changed.connect(
             self._background_video_settings_changed
         )
@@ -280,46 +276,6 @@ class MainWindow(QMainWindow):
             child.installEventFilter(self)
         self.navigation.setCurrentRow(self._navigation_index(self.playback_page))
         self.playback_controller.restore_web_displays()
-
-    def _offer_chord_backfill(self) -> None:
-        try:
-            missing = self.library_controller.missing_chord_packages()
-        except Exception as exc:
-            QMessageBox.warning(
-                self,
-                "检查和弦数据失败",
-                public_message(str(exc), "请重试或检查歌曲库"),
-            )
-            return
-        if not missing:
-            return
-        answer = QMessageBox.question(
-            self,
-            "补充和弦数据",
-            f"歌曲库中有 {len(missing)} 首歌曲缺少和弦数据，是否现在批量补充？",
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-            QMessageBox.StandardButton.Yes,
-        )
-        if answer != QMessageBox.StandardButton.Yes:
-            return
-        self.settings_page.begin_chord_fill(len(missing))
-        if not self.library_controller.start_chord_backfill(missing):
-            self.settings_page.finish_chord_fill(0, len(missing))
-
-    def _chord_backfill_finished(
-        self, succeeded: int, failed: int, failures: object
-    ) -> None:
-        self.settings_page.finish_chord_fill(succeeded, failed)
-        self.library_controller.refresh()
-        if failed and isinstance(failures, tuple):
-            details = "\n".join(str(item) for item in failures[:5])
-            if len(failures) > 5:
-                details += f"\n另有 {len(failures) - 5} 首失败"
-            QMessageBox.warning(
-                self,
-                "部分和弦数据补充失败",
-                f"成功 {succeeded} 首，失败 {failed} 首。\n{details}",
-            )
 
     def _load_for_playback(self, package: object) -> None:
         self._song_load_in_progress = True
@@ -741,6 +697,17 @@ class MainWindow(QMainWindow):
                 "音频输出设备已更改",
                 "新设备已保存，将在下次加载歌曲时生效。\n当前歌曲仍使用原来的音频输出设备。",
             )
+
+    def _save_language(self, language: str) -> None:
+        try:
+            self.settings_service.save_language(language)
+        except ValueError:
+            self.settings_page.set_language(self.settings_service.load_language())
+            return
+        self.playback_controller.set_language(language)
+        self.settings_page.show_status("语言已切换")
+        if self._translator is not None:
+            self._translator.set_language(language)
 
     def _background_video_settings_changed(self, value: object) -> None:
         if not isinstance(value, BackgroundVideoSettings):

@@ -16,7 +16,6 @@ from PySide6.QtWidgets import (
     QLineEdit,
     QListWidget,
     QListWidgetItem,
-    QProgressBar,
     QPushButton,
     QSizePolicy,
     QStackedWidget,
@@ -41,7 +40,7 @@ from dxband.ui.services.settings_service import (
 
 class SettingsPage(QWidget):
     save_requested = Signal(object)
-    chord_backfill_requested = Signal()
+    language_changed = Signal(str)
     refresh_output_devices_requested = Signal()
     background_video_upload_requested = Signal(object)
     background_video_delete_requested = Signal(str)
@@ -74,6 +73,18 @@ class SettingsPage(QWidget):
         audio_layout.addWidget(audio_subtitle)
         audio_layout.addSpacing(7)
 
+        language_caption = QLabel("语言", audio_panel)
+        language_caption.setObjectName("settingsFieldLabel")
+        audio_layout.addWidget(language_caption)
+        self.language_combo = QComboBox(audio_panel)
+        self.language_combo.addItem("简体中文", "zh")
+        self.language_combo.addItem("English", "en")
+        self.language_combo.currentIndexChanged.connect(
+            lambda _index: self.language_changed.emit(str(self.language_combo.currentData()))
+        )
+        audio_layout.addWidget(self.language_combo)
+        audio_layout.addSpacing(10)
+
         library_caption = QLabel("歌曲库目录", audio_panel)
         library_caption.setObjectName("settingsFieldLabel")
         audio_layout.addWidget(library_caption)
@@ -105,20 +116,6 @@ class SettingsPage(QWidget):
         output_row.addWidget(self.refresh_output_devices_button)
         audio_layout.addLayout(output_row)
         audio_layout.addStretch(1)
-        self.chord_fill_button = QPushButton("补充缺失和弦", audio_panel)
-        set_button_icon(self.chord_fill_button, "chord.svg")
-        self.chord_fill_button.clicked.connect(self.chord_backfill_requested)
-        audio_layout.addWidget(self.chord_fill_button)
-        self.chord_fill_status = QLabel("", audio_panel)
-        self.chord_fill_status.setObjectName("settingsFieldLabel")
-        self.chord_fill_status.setWordWrap(True)
-        self.chord_fill_status.hide()
-        self.chord_fill_progress = QProgressBar(audio_panel)
-        self.chord_fill_progress.setObjectName("chordFillProgress")
-        self.chord_fill_progress.setTextVisible(False)
-        self.chord_fill_progress.hide()
-        audio_layout.addWidget(self.chord_fill_status)
-        audio_layout.addWidget(self.chord_fill_progress)
         workspace.addWidget(audio_panel)
 
         display_panel = QFrame(self)
@@ -296,6 +293,11 @@ class SettingsPage(QWidget):
             settings.musician_screen_fingerprint,
             settings.musician_offset_ms,
         )
+
+    def set_language(self, language: str) -> None:
+        self.language_combo.blockSignals(True)
+        self.language_combo.setCurrentIndex(max(0, self.language_combo.findData(language)))
+        self.language_combo.blockSignals(False)
 
     def set_output_devices(
         self,
@@ -528,32 +530,3 @@ class SettingsPage(QWidget):
             musician_offset_ms=musician_offset,
         )
         self.save_requested.emit(value)
-
-    def begin_chord_fill(self, total: int) -> None:
-        self.chord_fill_status.setText(f"准备补充和弦数据（0/{total}）")
-        self.chord_fill_progress.setRange(0, total)
-        self.chord_fill_progress.setValue(0)
-        self.chord_fill_status.show()
-        self.chord_fill_progress.show()
-
-    def update_chord_fill(self, completed: int, total: int, title: str) -> None:
-        self.chord_fill_status.setText(
-            f"正在补充和弦：{title}（{completed}/{total}）"
-        )
-        self.chord_fill_progress.setRange(0, total)
-        self.chord_fill_progress.setValue(completed)
-        self.chord_fill_status.show()
-        self.chord_fill_progress.show()
-
-    def finish_chord_fill(self, succeeded: int, failed: int) -> None:
-        total = succeeded + failed
-        self.chord_fill_progress.setRange(0, max(1, total))
-        self.chord_fill_progress.setValue(total)
-        if failed:
-            self.chord_fill_status.setText(
-                f"和弦数据补充完成：成功 {succeeded} 首，失败 {failed} 首"
-            )
-        else:
-            self.chord_fill_status.setText(f"和弦数据补充完成：共 {succeeded} 首")
-        self.chord_fill_status.show()
-        self.chord_fill_progress.show()

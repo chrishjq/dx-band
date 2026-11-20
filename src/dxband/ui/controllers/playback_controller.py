@@ -78,7 +78,8 @@ class PlaybackController(QObject):
         }
         self._mix_volume = mix_settings.master_volume
         self._playback_rate = 1.0
-        self.screen_manager = ScreenManager(self)
+        language = settings_service.load_language()
+        self.screen_manager = ScreenManager(self, language=language)
         self._pcm_cache = PcmCacheService()
         self._messages: queue.SimpleQueue[tuple[str, Any]] = queue.SimpleQueue()
         self._load_generation = 0
@@ -93,12 +94,12 @@ class PlaybackController(QObject):
         self._current_background_resource_id = "none"
         self._playback_state = PlaybackState.EMPTY.value
         self._last_web_transport_push = 0.0
-        self._web_musician_server = WebMusicianServer()
+        self._web_musician_server = WebMusicianServer(language=language)
         self._web_musician_server.on_local_chord_mode = lambda mode: self._messages.put(
             ("musician_chord_mode", mode)
         )
         self._web_musician_dialog: WebMusicianDialog | None = None
-        self._web_singer_server = WebSingerServer()
+        self._web_singer_server = WebSingerServer(language=language)
         self._web_singer_dialog: WebMusicianDialog | None = None
 
         self._message_timer = QTimer(self)
@@ -177,6 +178,11 @@ class PlaybackController(QObject):
         self.screen_manager.set_audience_font_family(
             self.audience_font_library.find(self.audience_font_id).family
         )
+
+    def set_language(self, language: str) -> None:
+        self.screen_manager.set_language(language)
+        self._web_musician_server.set_language(language)
+        self._web_singer_server.set_language(language)
 
     @property
     def current_song_id(self) -> str | None:

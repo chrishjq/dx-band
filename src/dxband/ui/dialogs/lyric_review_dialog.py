@@ -123,6 +123,8 @@ class LyricReviewDialog(QDialog):
             )
             heading_label = QLabel(heading, self)
             heading_label.setObjectName("pageTitle")
+            if not metadata_editable:
+                heading_label.setProperty("i18n_skip", True)
             root.addWidget(heading_label)
         self.title_edit = QLineEdit(title, self)
         self.artist_edit = QLineEdit(artist, self)

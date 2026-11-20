@@ -117,6 +117,7 @@ class PlaybackPage(QWidget):
         now_playing_layout.setSpacing(4)
         self.song_label = QLabel("播放列表为空，请先添加歌曲", now_playing)
         self.song_label.setObjectName("songTitle")
+        self.song_label.setProperty("i18n_static", True)
         song_row = QHBoxLayout()
         song_row.setContentsMargins(0, 0, 0, 0)
         song_row.setSpacing(16)
@@ -686,6 +687,7 @@ class PlaybackPage(QWidget):
 
     def set_loading(self, title: str, artist: str = "", *, validating: bool = False) -> None:
         suffix = f" — {artist}" if artist else ""
+        self.song_label.setProperty("i18n_static", False)
         self.song_label.setText(f"{title}{suffix}")
         self.music_info_label.clear()
         self.music_info_label.hide()
@@ -698,6 +700,7 @@ class PlaybackPage(QWidget):
         self.next_song_button.setEnabled(False)
 
     def set_empty_playlist(self, *, unavailable: bool = False) -> None:
+        self.song_label.setProperty("i18n_static", True)
         self.song_label.setText(
             "播放列表中没有可播放歌曲" if unavailable else "播放列表为空，请先添加歌曲"
         )
@@ -722,6 +725,7 @@ class PlaybackPage(QWidget):
         bpm: int = 0,
     ) -> None:
         suffix = f" — {artist}" if artist else ""
+        self.song_label.setProperty("i18n_static", False)
         self.song_label.setText(f"{title}{suffix}")
         normalized_key = original_key.strip()
         self._original_bpm = bpm if bpm > 0 else 0

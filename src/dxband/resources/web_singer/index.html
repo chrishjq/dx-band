@@ -37,7 +37,7 @@
     <button id="info-toggle" type="button" aria-pressed="true">隐藏歌曲信息</button>
   </div>
   <script>
-    const state = {song: null, display: {offset_ms: 0, font_size: 42, music_info_visible: true}, transport: {state: 'empty', position_ms: 0}};
+    const state = {language: 'zh', song: null, display: {offset_ms: 0, font_size: 42, music_info_visible: true}, transport: {state: 'empty', position_ms: 0}};
     let receivedAt = performance.now();
     const info = document.getElementById('info');
     const countdown = document.getElementById('countdown');
@@ -87,6 +87,12 @@
     }
 
     function render() {
+      const english = state.language === 'en';
+      document.documentElement.lang = english ? 'en' : 'zh-CN';
+      document.title = english ? 'DX Band Singer Screen' : 'DX Band 歌手屏';
+      document.getElementById('display-controls').setAttribute('aria-label', english ? 'Singer screen display settings' : '歌手屏显示设置');
+      document.getElementById('smaller').setAttribute('aria-label', english ? 'Decrease font size' : '减小字号');
+      document.getElementById('larger').setAttribute('aria-label', english ? 'Increase font size' : '增大字号');
       const song = state.song;
       const lines = song?.lines || [];
       const at = position();
@@ -102,18 +108,18 @@
       const start = Math.min(Math.max(0, current >= 0 ? current - 1 : next >= 0 ? next : previous - 2), Math.max(0, lines.length - 3));
       const showInfo = musicInfoVisible();
       const seconds = next >= 0 ? Math.max(0, Math.ceil((lines[next].start_ms - at) / 1000)) : null;
-      const signature = [start, current, previous, next, seconds, song, showInfo, effectiveFontSize()];
+      const signature = [start, current, previous, next, seconds, song, showInfo, effectiveFontSize(), state.language];
       if (String(signature) === lastSignature) return;
       lastSignature = String(signature);
       document.documentElement.style.setProperty('--font-size', `${effectiveFontSize()}px`);
-      const parts = song ? [song.title, song.artist, song.original_key && song.bpm ? `原KEY ${song.original_key} · ${song.bpm} BPM` : ''].filter(Boolean) : [];
+      const parts = song ? [song.title, song.artist, song.original_key && song.bpm ? `${english ? 'Original key' : '原KEY'} ${song.original_key} · ${song.bpm} BPM` : ''].filter(Boolean) : [];
       info.textContent = showInfo ? parts.join(' · ') : '';
-      infoToggle.textContent = showInfo ? '隐藏歌曲信息' : '显示歌曲信息';
+      infoToggle.textContent = showInfo ? (english ? 'Hide song info' : '隐藏歌曲信息') : (english ? 'Show song info' : '显示歌曲信息');
       infoToggle.setAttribute('aria-pressed', String(showInfo));
-      countdown.textContent = seconds === null ? '' : `${seconds} 秒下句`;
+      countdown.textContent = seconds === null ? '' : (english ? `Next line in ${seconds}s` : `${seconds} 秒下句`);
       lyrics.replaceChildren();
       if (!lines.length) {
-        const empty = document.createElement('div'); empty.id = 'empty'; empty.textContent = '等待歌曲加载'; lyrics.append(empty);
+        const empty = document.createElement('div'); empty.id = 'empty'; empty.textContent = english ? 'Waiting for a song' : '等待歌曲加载'; lyrics.append(empty);
       } else {
         lines.slice(start, start + 3).forEach((line, offset) => {
           const index = start + offset;

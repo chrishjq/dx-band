@@ -49,8 +49,8 @@ class MusicianWidget(SingerWidget):
     beat_dot_peak_scale = 1.7
     beat_dot_lit_scale = 1.45
 
-    def __init__(self) -> None:
-        super().__init__()
+    def __init__(self, *, language: str = "zh") -> None:
+        super().__init__(language=language)
         self.cue_bars_per_row = self._bars_per_row_for_width(self.width())
         self.setWindowTitle("乐手屏（双击或 F11 全屏）")
         self.chords: ChordTimeline | None = None
@@ -130,7 +130,8 @@ class MusicianWidget(SingerWidget):
     def _musical_info_text(self) -> str:
         if not self.original_key or self.bpm <= 0:
             return ""
-        musical_info = f"原KEY {self.original_key} · {self.bpm} BPM"
+        key_label = "Original key" if self.language == "en" else "原KEY"
+        musical_info = f"{key_label} {self.original_key} · {self.bpm} BPM"
         if self.chord_mode == "chord_c":
             selected_key = "C"
         elif self.chord_mode.startswith("key:"):
@@ -149,7 +150,8 @@ class MusicianWidget(SingerWidget):
             return musical_info
         sign = "+" if transpose >= 0 else ""
         return (
-            f"原KEY {self.original_key} · 移调{sign}{transpose} · "
+            f"{key_label} {self.original_key} · "
+            f"{'Transpose ' if self.language == 'en' else '移调'}{sign}{transpose} · "
             f"Capo {capo} · {self.bpm} BPM"
         )
 
@@ -1408,7 +1410,7 @@ class MusicianWidget(SingerWidget):
                 56.0 * scale,
             ),
             Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignRight,
-            "引导拍子",
+            "Count-in" if self.language == "en" else "引导拍子",
         )
 
         bar_size = max(1, total // 2)

@@ -58,21 +58,30 @@ def test_refresh_output_devices_keeps_current_selection(qtbot: QtBot) -> None:
     assert page.output_combo.itemData(3) == 3
 
 
-def test_chord_fill_progress_reports_batch_state(qtbot: QtBot) -> None:
+def test_language_selection_is_persisted_and_emits_only_user_changes(
+    qtbot: QtBot, tmp_path: Path
+) -> None:
+    settings = QSettings(str(tmp_path / "language.ini"), QSettings.Format.IniFormat)
+    service = SettingsService(settings)
     page = SettingsPage()
     qtbot.addWidget(page)
+    changes: list[str] = []
+    page.language_changed.connect(changes.append)
 
-    page.begin_chord_fill(3)
-    page.update_chord_fill(1, 3, "测试歌曲")
+    assert service.load_language() == "zh"
+    page.set_language("en")
+    assert page.language_combo.currentData() == "en"
+    assert changes == []
 
-    assert page.chord_fill_progress.maximum() == 3
-    assert page.chord_fill_progress.value() == 1
-    assert page.chord_fill_status.text() == "正在补充和弦：测试歌曲（1/3）"
-
-    page.finish_chord_fill(2, 1)
-
-    assert page.chord_fill_progress.value() == 3
-    assert page.chord_fill_status.text() == "和弦数据补充完成：成功 2 首，失败 1 首"
+    page.language_combo.setCurrentIndex(page.language_combo.findData("zh"))
+    assert changes == ["zh"]
+    service.save_language("en")
+    assert (
+        SettingsService(
+            QSettings(str(tmp_path / "language.ini"), QSettings.Format.IniFormat)
+        ).load_language()
+        == "en"
+    )
 
 
 def test_refresh_output_devices_falls_back_to_system_default(qtbot: QtBot) -> None:

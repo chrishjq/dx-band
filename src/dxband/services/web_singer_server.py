@@ -10,8 +10,8 @@ from dxband.services.web_musician_server import WebMusicianServer
 
 
 class WebSingerServer(WebMusicianServer):
-    def __init__(self) -> None:
-        super().__init__(WEB_SINGER_ROOT / "index.html")
+    def __init__(self, *, language: str = "zh") -> None:
+        super().__init__(WEB_SINGER_ROOT / "index.html", language=language)
 
     def start(self, preferred_port: int = 8766) -> str:
         return super().start(preferred_port)

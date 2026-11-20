@@ -32,8 +32,9 @@ class ScreenManager(QObject):
     singer_window_closed = Signal()
     musician_state_changed = Signal(bool)
 
-    def __init__(self, parent: QObject | None = None) -> None:
+    def __init__(self, parent: QObject | None = None, *, language: str = "zh") -> None:
         super().__init__(parent)
+        self.language = language if language in {"zh", "en"} else "zh"
         self.audience_window: AudienceWidget | None = None
         self.singer_window: SingerWidget | WebSingerWindow | None = None
         self.musician_window: MusicianWidget | WebMusicianWindow | None = None
@@ -80,6 +81,13 @@ class ScreenManager(QObject):
     def descriptors(self) -> tuple[ScreenDescriptor, ...]:
         return tuple(self._descriptor(screen) for screen in QGuiApplication.screens())
 
+    def set_language(self, language: str) -> None:
+        self.language = language if language in {"zh", "en"} else "zh"
+        for window in (self.singer_window, self.musician_window):
+            if isinstance(window, SingerWidget):
+                window.language = self.language
+                window.update()
+
     def open_audience_output(
         self,
         document: LyricsDocument,
@@ -122,7 +130,7 @@ class ScreenManager(QObject):
         if screen is None:
             raise ValueError("已选择的歌手输出显示器当前不可用")
         self.close_singer_output()
-        window = SingerWidget()
+        window = SingerWidget(language=self.language)
         window.set_font_size(self.singer_font_size)
         window.set_beat_lights_visible(self.singer_beat_lights_visible)
         window.set_music_info_visible(self.singer_music_info_visible)
@@ -222,7 +230,7 @@ class ScreenManager(QObject):
         if screen is None:
             raise ValueError("已选择的乐手输出显示器当前不可用")
         self.close_musician_output()
-        window = MusicianWidget()
+        window = MusicianWidget(language=self.language)
         window.set_font_size(self.musician_font_size)
         window.set_chord_mode(self.musician_chord_mode)
         window.set_beat_lights_visible(self.musician_beat_lights_visible)

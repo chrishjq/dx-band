@@ -40,7 +40,7 @@ def test_web_musician_server_streams_current_snapshot_without_token(
 ) -> None:
     page = tmp_path / "index.html"
     page.write_text("<!doctype html><title>musician</title>", encoding="utf-8")
-    server = WebMusicianServer(page)
+    server = WebMusicianServer(page, language="en")
     server.set_transport(state="playing", position_ms=1234)
     server.set_guide_countdown(6, 8)
     server.start(preferred_port=0)
@@ -72,6 +72,7 @@ def test_web_musician_server_streams_current_snapshot_without_token(
         assert stream.readline() == b"event: snapshot\n"
         data_line = stream.readline().decode().removeprefix("data: ")
         snapshot = json.loads(data_line)
+        assert snapshot["language"] == "en"
         assert snapshot["transport"] == {"state": "playing", "position_ms": 1234}
         assert snapshot["guide"] == {"remaining": 6, "total": 8}
     finally:

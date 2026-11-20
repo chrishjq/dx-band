@@ -16,8 +16,9 @@ from dxband.ui.render.style import SingerStyle
 
 
 class SingerWidget(OutputWindow):
-    def __init__(self, parent: QWidget | None = None) -> None:
+    def __init__(self, parent: QWidget | None = None, *, language: str = "zh") -> None:
         super().__init__("歌手屏", parent)
+        self.language = language if language in {"zh", "en"} else "zh"
         self.timeline: LyricTimeline | None = None
         # 歌词位置允许应用歌手屏补偿；节拍位置必须始终跟随可听音频时钟。
         self.position_ms = 0
@@ -135,7 +136,8 @@ class SingerWidget(OutputWindow):
     def _musical_info_text(self) -> str:
         if not self.original_key or self.bpm <= 0:
             return ""
-        return f"原KEY {self.original_key} · {self.bpm} BPM"
+        key_label = "Original key" if self.language == "en" else "原KEY"
+        return f"{key_label} {self.original_key} · {self.bpm} BPM"
 
     def _visible_music_info(self, metrics: QFontMetrics, width: int) -> str:
         """窄窗口优先保留原 Key 和 BPM，仅截短歌名、歌手。"""
@@ -338,7 +340,11 @@ class SingerWidget(OutputWindow):
             painter.drawText(
                 self.rect().adjusted(0, 22, -30, 0),
                 Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignRight,
-                self.format_countdown(context.next_countdown_ms),
+                (
+                    f"Next line in {max(0, math.ceil(context.next_countdown_ms / 1000))}s"
+                    if self.language == "en"
+                    else self.format_countdown(context.next_countdown_ms)
+                ),
             )
 
     def _paint_beat_indicator(self, painter: QPainter) -> None:

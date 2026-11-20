@@ -9,6 +9,7 @@ from PySide6.QtWidgets import QApplication
 from dxband.services.runtime_environment import configure_runtime_environment
 from dxband.services.sleep_inhibitor import sleep_inhibitor
 from dxband.ui.branding import APP_DISPLAY_NAME, APP_NAME, application_icon
+from dxband.ui.i18n import UiTranslator
 from dxband.ui.main_window import MainWindow
 from dxband.ui.theme import apply_professional_theme
 from dxband.utils.logging_setup import configure_logging
@@ -26,6 +27,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     application.setWindowIcon(application_icon())
     application.aboutToQuit.connect(sleep_inhibitor.close)
     apply_professional_theme(application)
-    window = MainWindow()
+    translator = UiTranslator(application)
+    window = MainWindow(translator=translator)
+    translator.set_language(window.settings_service.load_language())
     window.show()
     return application.exec()

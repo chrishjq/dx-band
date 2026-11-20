@@ -119,6 +119,16 @@ class SettingsService:
         self.settings.setValue("screens/musician_offset_ms", value.musician_offset_ms)
         self.settings.sync()
 
+    def load_language(self) -> str:
+        language = str(self.settings.value("appearance/language", "zh"))
+        return language if language in {"zh", "en"} else "zh"
+
+    def save_language(self, language: str) -> None:
+        if language not in {"zh", "en"}:
+            raise ValueError("Unsupported interface language")
+        self.settings.setValue("appearance/language", language)
+        self.settings.sync()
+
     def load_output_window_sizes(self) -> OutputWindowSizes:
         """读取两个歌词输出窗口上次使用的窗口尺寸。"""
         return OutputWindowSizes(

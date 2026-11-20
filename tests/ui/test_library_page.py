@@ -10,9 +10,8 @@ from PySide6.QtWidgets import QDialog, QFileDialog, QLabel, QPushButton
 from pytest import MonkeyPatch
 from pytestqt.qtbot import QtBot
 
-from dxband.creation.package_validator import SongPackage, SongPackageValidator
+from dxband.creation.package_validator import SongPackageValidator
 from dxband.creation.sheetsage2_runner import SheetSage2Runner
-from dxband.models.chord import ChordSegment, ChordTimeline
 from dxband.models.song import MusicalConfig, SongConfig
 from dxband.services.library_service import LibraryScanResult, LibraryService
 from dxband.ui.controllers.library_controller import LibraryController
@@ -377,38 +376,6 @@ def test_library_table_defaults_to_newest_created_song_first(
         "较新的歌曲",
         older.config.title,
     ]
-
-
-def test_chord_backfill_reuses_recognition_without_opening_editor(
-    qtbot: QtBot,
-    package_factory: Callable[[], Path],
-    monkeypatch: MonkeyPatch,
-) -> None:
-    package_root = package_factory()
-    service = LibraryService(package_root.parent)
-    page = LibraryPage()
-    qtbot.addWidget(page)
-    controller = LibraryController(page, service, SettingsService())
-    recognized: list[Path] = []
-    timeline = ChordTimeline(
-        segments=[ChordSegment(start_ms=0, end_ms=1000, chord="C")]
-    )
-
-    def recognize(package: SongPackage) -> ChordTimeline:
-        recognized.append(package.root)
-        return timeline
-
-    monkeypatch.setattr(controller, "_recognize_chords", recognize)
-    missing = controller.missing_chord_packages()
-
-    assert len(missing) == 1
-    with qtbot.waitSignal(controller.chord_batch_finished, timeout=3000) as finished:
-        assert controller.start_chord_backfill(missing)
-
-    assert finished.args[:2] == [1, 0]
-    assert recognized == [package_root]
-    assert service.scan().songs[0].chords == timeline
-    assert controller._edit_dialog is None
 
 
 def test_chord_reanalysis_uses_timed_chords_without_score_bars(

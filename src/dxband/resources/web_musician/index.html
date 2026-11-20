@@ -448,7 +448,28 @@
       const isLocalDisplay = pageParams.get('local') === '1';
       const isPdfPage = pageParams.get('pdf') === '1';
       const isOfflinePdfPage = isPdfPage && pageParams.get('offline') === '1';
-      const state = { song: null, display: { chord_mode: 'degree', offset_ms: 0 }, guide: { remaining: 0, total: 0 }, transport: { state: 'empty', position_ms: 0 }, receivedAt: performance.now(), rows: [], measures: [], chordTargets: [], renderRows: [], rowTops: [], rowHeights: [], stageHeight: 0, barsPerRow: 2 };
+      const state = { language: 'zh', song: null, display: { chord_mode: 'degree', offset_ms: 0 }, guide: { remaining: 0, total: 0 }, transport: { state: 'empty', position_ms: 0 }, receivedAt: performance.now(), rows: [], measures: [], chordTargets: [], renderRows: [], rowTops: [], rowHeights: [], stageHeight: 0, barsPerRow: 2 };
+      const tr = (chinese, english) => state.language === 'en' ? english : chinese;
+      const translateChrome = () => {
+        document.documentElement.lang = state.language === 'en' ? 'en' : 'zh-CN';
+        document.title = tr('DX Band 乐手屏', 'DX Band Musician Screen');
+        document.querySelectorAll('.pdf-brand-cn, .pdf-watermark-cn').forEach((node) => { node.textContent = tr('大象乐队工作站', 'Elephant Band Workstation'); });
+        $('smaller').setAttribute('aria-label', tr('减小字号', 'Decrease font size'));
+        $('larger').setAttribute('aria-label', tr('增大字号', 'Increase font size'));
+        elements.exportPdf.setAttribute('aria-label', tr('导出 PDF', 'Export PDF'));
+        elements.exportPdf.querySelector('.export-label').textContent = tr('导出 ', 'Export ');
+        document.querySelector('.chord-modes').setAttribute('aria-label', tr('和弦显示调式', 'Chord display mode'));
+        document.querySelector('[data-chord-mode="degree"]').textContent = tr('级数', 'Degrees');
+        $('chordKeySelect').setAttribute('aria-label', tr('切换调式', 'Change key'));
+        elements.stage.setAttribute('aria-label', tr('乐谱，可上下滚动', 'Score, scroll vertically'));
+        elements.empty.innerHTML = `<div><strong>${tr('等待歌曲', 'Waiting for a song')}</strong>${tr('主控台加载歌曲后，谱面会自动出现', 'The score appears when the main console loads a song')}</div>`;
+        document.querySelector('.guide-label').textContent = tr('引导拍子', 'Count-in');
+        elements.scrollRail.setAttribute('aria-label', tr('滚动乐谱', 'Scroll score'));
+        elements.followPlayback.textContent = tr('跟随播放', 'Follow playback');
+        elements.status.querySelector('span').textContent = elements.status.classList.contains('offline')
+          ? tr('重连中', 'Reconnecting') : tr('已连接', 'Connected');
+        updateFullscreenControl();
+      };
       let fontScale = Number(localStorage.getItem('dx-band-font-scale') || 1);
       let chordMode = localStorage.getItem('dx-band-chord-mode') || '';
       let selectedKeyMode = '';
@@ -479,8 +500,8 @@
       };
       const updateFullscreenControl = () => {
         const active = Boolean(document.fullscreenElement);
-        elements.fullscreen.textContent = active ? '退出' : '全屏';
-        elements.fullscreen.setAttribute('aria-label', active ? '退出全屏' : '进入全屏');
+        elements.fullscreen.textContent = active ? tr('退出', 'Exit') : tr('全屏', 'Full screen');
+        elements.fullscreen.setAttribute('aria-label', active ? tr('退出全屏', 'Exit full screen') : tr('进入全屏', 'Enter full screen'));
         elements.fullscreen.setAttribute('aria-pressed', String(active));
       };
       const toggleFullscreen = async () => {
@@ -488,7 +509,7 @@
           if (document.fullscreenElement) await document.exitFullscreen();
           else await document.documentElement.requestFullscreen();
         } catch (_error) {
-          toast('当前浏览器不允许进入全屏');
+          toast(tr('当前浏览器不允许进入全屏', 'This browser does not allow full screen'));
         }
       };
       const position = () => {
@@ -1059,7 +1080,7 @@
         displayKeys.forEach((key) => {
           const originalKey = notePitch(key) === notePitch(original);
           const label = originalKey
-            ? `${key}(原key${sourceKey === key ? '' : ` ${sourceKey}`})`
+            ? `${key}(${tr('原key', 'original key')}${sourceKey === key ? '' : ` ${sourceKey}`})`
             : key;
           select.add(new Option(label, `key:${key}`));
         });
@@ -1068,16 +1089,16 @@
       const updateSongDetails = () => {
         const song = state.song;
         if (!song) return;
-        const details = [`原KEY ${song.original_key || song.numbered_key}`, `${song.melody_bpm || song.bpm} BPM`];
+        const details = [`${tr('原KEY', 'Original key')} ${song.original_key || song.numbered_key}`, `${song.melody_bpm || song.bpm} BPM`];
         const selected = selectedKeyDetails();
         if (song.melody_reference) {
           const transpose = selected?.transpose ?? song.melody_transpose;
           const transposeLabel = Number.isInteger(transpose)
-            ? `（移调${transpose >= 0 ? '+' : ''}${transpose}）`
+            ? `${tr('（移调', ' (transpose ')}${transpose >= 0 ? '+' : ''}${transpose}${tr('）', ')')}`
             : '';
           details.push(`1=${song.melody_reference}${transposeLabel}`);
         } else if (selected) {
-          details.splice(1, 0, `移调${selected.transpose >= 0 ? '+' : ''}${selected.transpose}`);
+          details.splice(1, 0, `${tr('移调', 'Transpose ')}${selected.transpose >= 0 ? '+' : ''}${selected.transpose}`);
         }
         if (selected) {
           details.splice(1, 0, `Capo ${selected.capo}`);
@@ -1091,7 +1112,7 @@
             method: 'POST', headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ mode: chordMode }),
           }).then((response) => { if (!response.ok) throw new Error('save failed'); })
-            .catch(() => toast('保存和弦模式失败'));
+            .catch(() => toast(tr('保存和弦模式失败', 'Could not save the chord mode')));
         }
       };
       const switchChordMode = (mode) => {
@@ -1188,7 +1209,7 @@
         group.className = 'melody-group';
         if (triplet) {
           group.classList.add('melody-triplet');
-          group.setAttribute('aria-label', '八分音符三连音');
+          group.setAttribute('aria-label', tr('八分音符三连音', 'Eighth-note triplet'));
         }
         events.forEach((note) => {
           if (note.kind === 'rest' || note.kind === 'hold') {
@@ -1198,7 +1219,7 @@
               ? `melody-note melody-rest${duration < 4 ? ' short' : ''}${duration < 2 ? ' sixteenth' : ''}`
               : 'melody-hold';
             glyph.textContent = note.kind === 'rest' ? '0' : '—';
-            glyph.setAttribute('aria-label', note.kind === 'rest' ? `休止 ${duration} 个十六分音符` : '延音');
+            glyph.setAttribute('aria-label', note.kind === 'rest' ? tr(`休止 ${duration} 个十六分音符`, `Rest for ${duration} sixteenth notes`) : tr('延音', 'Sustain'));
             if (note.kind === 'rest' && note.start_16th !== undefined && note.duration_16ths !== undefined) {
               glyph.dataset.start16th = String(note.start_16th);
               glyph.dataset.duration16ths = String(note.duration_16ths);
@@ -1226,7 +1247,7 @@
             glyph.dataset.tieIn = String(Boolean(note.tie_in));
             glyph.dataset.tieOut = String(Boolean(note.tie_out));
           }
-          glyph.setAttribute('aria-label', `MIDI ${note.midi}，${note.review === 'needs_review' ? '待校' : '候选'}${note.tie_id !== undefined ? '，连音' : ''}`);
+          glyph.setAttribute('aria-label', `MIDI ${note.midi}, ${note.review === 'needs_review' ? tr('待校', 'needs review') : tr('候选', 'candidate')}${note.tie_id !== undefined ? tr('，连音', ', tied') : ''}`);
           const pitchToken = document.createElement('span'); pitchToken.className = 'melody-pitch';
           if (pitch?.accidental) {
             pitchToken.classList.add('has-accidental');
@@ -1263,8 +1284,8 @@
         backgroundLayoutTimer = 0;
         if (!song || !song.rows || !song.rows.length) {
           elements.empty.hidden = false;
-          elements.title.textContent = song ? song.title : '等待主控台';
-          elements.subtitle.textContent = song ? '这首歌暂时没有可显示的谱面' : '网页乐手屏已就绪';
+          elements.title.textContent = song ? song.title : tr('等待主控台', 'Waiting for the main console');
+          elements.subtitle.textContent = song ? tr('这首歌暂时没有可显示的谱面', 'No score is available for this song yet') : tr('网页乐手屏已就绪', 'Web musician screen is ready');
           elements.pdfTitle.textContent = song?.title || '';
           elements.pdfArtist.textContent = song?.artist || '';
           elements.pdfDetails.textContent = '';
@@ -1336,10 +1357,10 @@
               measure.style.setProperty('--bar-beats', String(Math.max(1, bar.beats.length)));
               if (bar.meter) {
                 measure.dataset.meter = bar.meter_uncertain ? `${bar.meter}?` : bar.meter;
-                if (bar.meter_uncertain) measure.title = '拍号待校';
+                if (bar.meter_uncertain) measure.title = tr('拍号待校', 'Time signature needs review');
                 const meter = document.createElement('span'); meter.className = 'meter-label';
                 meter.textContent = measure.dataset.meter;
-                meter.setAttribute('aria-label', `拍号 ${measure.dataset.meter}`);
+                meter.setAttribute('aria-label', `${tr('拍号', 'Time signature')} ${measure.dataset.meter}`);
                 measure.appendChild(meter);
               }
               bar.beats.forEach((beat) => appendBeat(beat, beatIndex++, measure));
@@ -1367,7 +1388,7 @@
         elements.score.appendChild(fragment);
         scheduleScoreLayout();
       };
-      window.dxBandGetPrintSnapshot = () => ({song: state.song, display: state.display, chordMode});
+      window.dxBandGetPrintSnapshot = () => ({language: state.language, song: state.song, display: state.display, chordMode});
       window.dxBandPdfReady = () => {
         if (!isPdfPage || !state.song?.rows?.length || !state.renderRows.length) return false;
         refreshScoreLayout();
@@ -1375,7 +1396,7 @@
       };
       const exportPdf = () => {
         if (!state.song?.rows?.length || pdfExporting) {
-          if (!state.song?.rows?.length) toast('当前没有可导出的谱面');
+          if (!state.song?.rows?.length) toast(tr('当前没有可导出的谱面', 'There is no score to export'));
           return;
         }
         if (isLocalDisplay) { location.hash = 'dx-export-pdf'; return; }
@@ -1383,7 +1404,7 @@
         url.hash = '';
         url.searchParams.set('pdf', '1');
         url.searchParams.set('offline', '1');
-        if (!window.open(url.toString(), '_blank')) toast('浏览器阻止了导出页面，请允许弹出窗口');
+        if (!window.open(url.toString(), '_blank')) toast(tr('浏览器阻止了导出页面，请允许弹出窗口', 'The browser blocked the export page; allow pop-up windows'));
       };
       const renderGuide = () => {
         const total = Math.max(0, Number(state.guide.total || 0));
@@ -1413,7 +1434,7 @@
         if (now - lastAnimationAt < 33) return;
         lastAnimationAt = now;
         const transportPosition = position() + Number(state.display.offset_ms || 0);
-        const labels = { playing: '播放中', paused: '已暂停', stopped: '已停止', ended: '已结束', empty: '等待' };
+        const labels = { playing: tr('播放中', 'Playing'), paused: tr('已暂停', 'Paused'), stopped: tr('已停止', 'Stopped'), ended: tr('已结束', 'Ended'), empty: tr('等待', 'Waiting') };
         const transportText = `${formatTime(transportPosition)} · ${labels[state.transport.state] || state.transport.state}`;
         if (transportText !== lastTransportText) {
           elements.transport.textContent = transportText;
@@ -1446,10 +1467,12 @@
       };
       const setConnected = (connected) => {
         elements.status.classList.toggle('offline', !connected);
-        elements.status.querySelector('span').textContent = connected ? '已连接' : '重连中';
+        elements.status.querySelector('span').textContent = connected ? tr('已连接', 'Connected') : tr('重连中', 'Reconnecting');
       };
       const applySnapshot = (payload) => {
+        state.language = payload.language || state.language;
         state.song = payload.song; state.display = payload.display || state.display;
+        translateChrome();
         setAutoFollow(true);
         if (!chordMode) chordMode = state.display.chord_mode;
         chordMode = normalizedChordMode(resolveLegacyMode(chordMode, state.song));
@@ -1541,12 +1564,12 @@
       document.querySelectorAll('[data-chord-mode]').forEach((button) => {
         button.addEventListener('click', () => {
           switchChordMode(button.dataset.chordMode);
-          toast('和弦模式：级数');
+          toast(tr('和弦模式：级数', 'Chord mode: degrees'));
         });
       });
       $('chordKeySelect').addEventListener('change', (event) => {
         switchChordMode(event.target.value);
-        toast(`和弦模式：${event.target.selectedOptions[0]?.textContent || chordMode}`);
+        toast(`${tr('和弦模式：', 'Chord mode: ')}${event.target.selectedOptions[0]?.textContent || chordMode}`);
       });
       $('chordKeySelect').addEventListener('pointerdown', (event) => {
         if (chordMode !== 'degree') return;
