@@ -193,7 +193,7 @@ def test_web_musician_page_omits_beat_lights_without_losing_score() -> None:
     assert "addEventListener('scroll', updateScrollRail" not in page
     assert "if (now - lastAnimationAt < 33) return" in page
     assert "if (window.innerWidth < 700 || window.innerHeight < 600) return 1;" in page
-    assert "const widthLimit = usableWidth >= 4 * 145 * fontScale ? 4" in page
+    assert "window.innerWidth >= 1280 && usableWidth >= 4 * 145 * fontScale ? 4" in page
     assert "bars.length === barsPerRow" in page
     assert "Math.min(barsPerRow, 2)" not in page
     assert "beats: bars.flatMap((bar) => bar.beats)" in page

@@ -12,8 +12,8 @@ build/
 dist/
 *.egg-info/
 
-# Generated promotional video workspaces and rendered outputs.
-/promo-output/
+# Promotional video source is kept; captured media and rendered outputs are generated.
+/promo-output/*
 
 # Runtime state and user media must never enter source control.
 .work/
@@ -38,3 +38,18 @@ song-library/
 *.safetensors
 *.zip
 .*-raw-analysis/
+
+!/promo-output/ruyuan-demo/
+/promo-output/ruyuan-demo/*
+!/promo-output/ruyuan-demo/promo-video.json
+!/promo-output/ruyuan-demo/tools/
+!/promo-output/ruyuan-demo/remotion/
+/promo-output/ruyuan-demo/remotion/*
+!/promo-output/ruyuan-demo/remotion/src/
+!/promo-output/ruyuan-demo/remotion/public/
+!/promo-output/ruyuan-demo/remotion/package.json
+!/promo-output/ruyuan-demo/remotion/package-lock.json
+!/promo-output/ruyuan-demo/remotion/VERTICAL_TEMPLATE.md
+/promo-output/ruyuan-demo/remotion/public/*
+!/promo-output/ruyuan-demo/remotion/public/*.png
+!/promo-output/ruyuan-demo/remotion/public/qr-only-blurred.mp4
