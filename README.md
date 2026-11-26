@@ -56,7 +56,7 @@ uv run dx-band
 
 If FFmpeg is already installed, skip `brew install ffmpeg`. For later launches, run `uv run dx-band` from the project root.
 
-To create songs, obtain the required AI models from their original providers and place them on your computer. Model weights are not included in this repository. See the [model setup guide](docs/model_self_setup.md) (Chinese). Basic tests and playback of existing songs do not require model downloads.
+To create songs, obtain the required AI models from their original providers and place them on your computer. Model weights are not included in this repository. In the desktop app Settings page you can check readiness by role and download locally, or follow the [model setup guide](docs/model_self_setup.md) (Chinese). Basic tests and playback of existing songs do not require model downloads.
 
 ## Usage notes
 

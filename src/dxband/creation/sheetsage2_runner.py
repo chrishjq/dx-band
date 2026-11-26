@@ -12,25 +12,36 @@ import time
 from pathlib import Path
 
 from dxband.creation.cancellation import CancellationToken
+from dxband.creation.model_download import huggingface_home, sheetsage2_model_dir
+from dxband.services.application_paths import default_application_data_root
 from dxband.workers.command import subprocess_creation_flags
 
 
 class SheetSage2Runner:
     def __init__(self, python: Path | None = None, model: Path | None = None) -> None:
-        local_install = Path.home() / "Library" / "Application Support" / "DXBand" / "SheetSage2"
+        local_install = default_application_data_root() / "SheetSage2"
         configured_python = python or os.environ.get("DX_BAND_SHEETSAGE2_PYTHON")
         if configured_python is None and (local_install / ".venv" / "bin" / "python").is_file():
             configured_python = local_install / ".venv" / "bin" / "python"
         self.python = Path(configured_python) if configured_python else Path(sys.executable)
-        model_value = model or os.environ.get("DX_BAND_SHEETSAGE2_MODEL_DIR")
-        if model_value is None and (local_install / "model" / "config.json").is_file():
-            model_value = local_install / "model"
-        self.model = Path(model_value).expanduser() if model_value else None
+        self._explicit_model = model is not None
+        self.model = Path(model).expanduser() if model is not None else None
         self._ready = False
+        self._resolve_model()
+
+    def _resolve_model(self) -> None:
+        if self._explicit_model:
+            return
+        if os.environ.get("DX_BAND_SHEETSAGE2_MODEL_DIR"):
+            self.model = Path(os.environ["DX_BAND_SHEETSAGE2_MODEL_DIR"]).expanduser()
+            return
+        managed = sheetsage2_model_dir()
+        self.model = managed if (managed / "config.json").is_file() else None
 
     def check_ready(self) -> None:
         if self._ready:
             return
+        self._resolve_model()
         if self.model is None or not (self.model / "config.json").is_file():
             raise RuntimeError(
                 "未配置 SheetSage2 模型目录；请设置 DX_BAND_SHEETSAGE2_MODEL_DIR"
@@ -95,12 +106,7 @@ class SheetSage2Runner:
         root = Path(__file__).resolve().parents[3]
         script = root / "scripts" / "run_sheetsage2.py"
         # SheetSage2 and MERT are provided by the user in a separate local cache.
-        external_home = Path(
-            os.environ.get(
-                "DX_BAND_SHEETSAGE2_HF_HOME",
-                str(Path.home() / ".cache" / "huggingface"),
-            )
-        ).expanduser()
+        external_home = huggingface_home()
         environment = os.environ.copy()
         environment["HF_HOME"] = str(external_home)
         environment["HF_HUB_CACHE"] = str(external_home / "hub")

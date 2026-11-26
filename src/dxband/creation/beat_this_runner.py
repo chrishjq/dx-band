@@ -12,25 +12,38 @@ import time
 from pathlib import Path
 
 from dxband.creation.cancellation import CancellationToken
+from dxband.creation.model_download import beat_this_checkpoint_path
+from dxband.services.application_paths import default_application_data_root
 from dxband.workers.command import subprocess_creation_flags
 
 
 class BeatThisRunner:
     def __init__(self, python: Path | None = None, checkpoint: Path | None = None) -> None:
-        local_install = Path.home() / "Library" / "Application Support" / "DXBand" / "BeatThis"
+        local_install = default_application_data_root() / "BeatThis"
         configured_python = python or os.environ.get("DX_BAND_BEAT_THIS_PYTHON")
         if configured_python is None and (local_install / ".venv" / "bin" / "python").is_file():
             configured_python = local_install / ".venv" / "bin" / "python"
         self.python = Path(configured_python) if configured_python else Path(sys.executable)
-        model_value = checkpoint or os.environ.get("DX_BAND_BEAT_THIS_CHECKPOINT")
-        if model_value is None and (local_install / "model" / "final0.ckpt").is_file():
-            model_value = local_install / "model" / "final0.ckpt"
-        self.checkpoint = str(Path(model_value).expanduser()) if model_value else ""
+        self._explicit_checkpoint = checkpoint is not None
+        self.checkpoint = str(Path(checkpoint).expanduser()) if checkpoint is not None else ""
         self._ready = False
+        self._resolve_checkpoint()
+
+    def _resolve_checkpoint(self) -> None:
+        if self._explicit_checkpoint:
+            return
+        if os.environ.get("DX_BAND_BEAT_THIS_CHECKPOINT"):
+            self.checkpoint = str(
+                Path(os.environ["DX_BAND_BEAT_THIS_CHECKPOINT"]).expanduser()
+            )
+            return
+        managed = beat_this_checkpoint_path()
+        self.checkpoint = str(managed) if managed.is_file() else ""
 
     def check_ready(self) -> None:
         if self._ready:
             return
+        self._resolve_checkpoint()
         if not self.checkpoint:
             raise RuntimeError(
                 "未配置 Beat This! 模型文件；请自行下载并设置 DX_BAND_BEAT_THIS_CHECKPOINT"

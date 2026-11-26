@@ -568,8 +568,10 @@ def test_create_song_extracts_percentage_without_showing_logs(qtbot: QtBot) -> N
     assert page.stage_label.text() == "阶段：发生错误：歌曲处理失败，请重试"
 
     page.show_error("Beat This! 模型文件不存在：/private/path")
-    assert "DX_BAND_BEAT_THIS_CHECKPOINT" in page.stage_label.text()
+    assert "节拍模型" in page.stage_label.text()
+    assert "设置页" in page.stage_label.text()
     assert "/private/path" not in page.stage_label.text()
+    assert "Beat This" not in page.stage_label.text()
 
 
 def test_creation_controller_keeps_stage_when_receiving_log_progress(

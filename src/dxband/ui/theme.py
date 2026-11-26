@@ -282,6 +282,42 @@ QLabel#settingsFieldLabel {
     font-weight: 600;
 }
 
+QFrame#settingsModelList {
+    background-color: #14161a;
+    border: 1px solid #30333a;
+    border-radius: 7px;
+}
+
+QLabel#settingsModelTitle {
+    color: #e4e6ea;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+QLabel#settingsModelDetail {
+    color: #7f858e;
+    font-size: 10px;
+}
+
+QLabel#settingsModelStatus {
+    color: #8d939d;
+    font-size: 11px;
+    font-weight: 600;
+    min-width: 42px;
+}
+
+QLabel#settingsModelStatus[state="ready"] {
+    color: #7dbe8e;
+}
+
+QLabel#settingsModelStatus[state="missing"] {
+    color: #d0a15c;
+}
+
+QLabel#settingsModelStatus[state="busy"] {
+    color: #7aa7d9;
+}
+
 QLabel#settingsHintCard {
     color: #90959e;
     background-color: #15171b;

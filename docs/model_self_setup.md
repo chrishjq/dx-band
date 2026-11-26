@@ -29,4 +29,6 @@ uv run hf download parseh/aligner-en --revision c0f8960268a23db8e3705ef24d3236e4
 uv run hf download ctl/wav2vec2-large-xlsr-cantonese --revision 11cb21cb68b4ed15f4c6633494ae6cc90a89bc34
 ```
 
-准备好所需模型后，在项目根目录执行 `uv run dx-band`。基础测试和播放已有歌曲不需要模型权重。模型推理使用用户本机的文件；程序不会代替用户下载上述模型。
+也可在桌面应用的「设置」页查看各功能资源是否就绪，并按用途一键下载到本机默认目录。设置页只显示功能名称（如节拍模型、歌词适配模型），不展示具体上游模型名。下载仍表示你同意遵守各模型原站许可。
+
+准备好所需模型后，在项目根目录执行 `uv run dx-band`。基础测试和播放已有歌曲不需要模型权重。

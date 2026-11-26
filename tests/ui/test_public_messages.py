@@ -26,21 +26,26 @@ def test_public_message_preserves_useful_user_facing_errors() -> None:
     assert public_message("请选择歌词文件", "请重试") == "请选择歌词文件"
 
 
-def test_creation_errors_show_fixed_model_setup_advice() -> None:
+def test_creation_errors_point_to_settings_download_by_role() -> None:
     cases = (
-        ("未配置 SheetSage2 模型目录", "DX_BAND_SHEETSAGE2_MODEL_DIR"),
-        ("Beat This! 模型文件不存在：/private/path", "DX_BAND_BEAT_THIS_CHECKPOINT"),
-        ("缺少本机 Demucs htdemucs_6s 权重", "HTDemucs-6s"),
-        ("缺少 Fun-ASR 模型代码", "DX_BAND_FUN_ASR_MODEL_CODE"),
-        ("缺少本机 Fun-ASR 模型", "DX_BAND_FUN_ASR_MODEL_DIR"),
-        ("缺少本机zh歌词对齐模型", "DX_BAND_ALIGNER_ZH_MODEL_DIR"),
-        ("缺少en歌词对齐模型文件：/private/path", "DX_BAND_ALIGNER_EN_MODEL_DIR"),
-        ("缺少本机yue歌词对齐模型", "DX_BAND_ALIGNER_YUE_MODEL_DIR"),
+        ("未配置 SheetSage2 模型目录", "谱面分析模型"),
+        ("Beat This! 模型文件不存在：/private/path", "节拍模型"),
+        ("缺少本机 Demucs htdemucs_6s 权重", "音轨分离模型"),
+        ("缺少 Fun-ASR 模型代码", "歌词识别模型"),
+        ("缺少本机 Fun-ASR 模型", "歌词识别模型"),
+        ("缺少本机zh歌词对齐模型", "中文歌词适配模型"),
+        ("缺少en歌词对齐模型文件：/private/path", "英文歌词适配模型"),
+        ("缺少本机yue歌词对齐模型", "粤语歌词适配模型"),
     )
-    for backend_message, setup_hint in cases:
+    for backend_message, role_label in cases:
         visible = creation_error_message(backend_message)
-        assert setup_hint in visible
+        assert role_label in visible
+        assert "设置页" in visible
         assert "/private/path" not in visible
+        assert "SheetSage2" not in visible
+        assert "Demucs" not in visible
+        assert "Fun-ASR" not in visible
+        assert "DX_BAND_" not in visible
     assert creation_error_message("Beat This! 模型无法启动") == "歌曲处理失败，请重试"
 
 

@@ -24,6 +24,7 @@ from PySide6.QtWidgets import (
 )
 
 from dxband.audio.output_device import AudioOutputDevice
+from dxband.creation.model_download import ModelRoleStatus
 from dxband.ui.page_layout import (
     BUTTON_ROW_SPACING,
     add_page_header,
@@ -38,6 +39,61 @@ from dxband.ui.services.settings_service import (
 )
 
 
+class ModelRoleRow(QWidget):
+    download_requested = Signal(str)
+
+    def __init__(self, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self._key = ""
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(0, 2, 0, 2)
+        layout.setSpacing(8)
+        text_column = QVBoxLayout()
+        text_column.setSpacing(1)
+        self.title_label = QLabel(self)
+        self.title_label.setObjectName("settingsModelTitle")
+        self.detail_label = QLabel(self)
+        self.detail_label.setObjectName("settingsModelDetail")
+        text_column.addWidget(self.title_label)
+        text_column.addWidget(self.detail_label)
+        layout.addLayout(text_column, 1)
+        self.status_label = QLabel(self)
+        self.status_label.setObjectName("settingsModelStatus")
+        self.status_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        layout.addWidget(self.status_label)
+        self.download_button = QPushButton("下载", self)
+        self.download_button.setObjectName("settingsCompactButton")
+        self.download_button.clicked.connect(self._request_download)
+        layout.addWidget(self.download_button)
+
+    def _request_download(self) -> None:
+        if self._key:
+            self.download_requested.emit(self._key)
+
+    def set_status(self, status: ModelRoleStatus, busy_key: str | None = None) -> None:
+        self._key = status.key
+        self.title_label.setText(status.label)
+        self.detail_label.setText(status.detail)
+        downloading = busy_key == status.key
+        if downloading:
+            self.status_label.setText("下载中")
+            self.status_label.setProperty("state", "busy")
+            self.download_button.setEnabled(False)
+            self.download_button.setText("下载中…")
+        elif status.ready:
+            self.status_label.setText("已就绪")
+            self.status_label.setProperty("state", "ready")
+            self.download_button.setEnabled(False)
+            self.download_button.setText("已下载")
+        else:
+            self.status_label.setText("未下载")
+            self.status_label.setProperty("state", "missing")
+            self.download_button.setEnabled(busy_key is None)
+            self.download_button.setText("下载")
+        self.status_label.style().unpolish(self.status_label)
+        self.status_label.style().polish(self.status_label)
+
+
 class SettingsPage(QWidget):
     save_requested = Signal(object)
     language_changed = Signal(str)
@@ -45,6 +101,7 @@ class SettingsPage(QWidget):
     background_video_upload_requested = Signal(object)
     background_video_delete_requested = Signal(str)
     audience_font_changed = Signal(str)
+    model_download_requested = Signal(str)
 
     def __init__(self) -> None:
         super().__init__()
@@ -115,7 +172,22 @@ class SettingsPage(QWidget):
         self.refresh_output_devices_button.clicked.connect(self.refresh_output_devices_requested)
         output_row.addWidget(self.refresh_output_devices_button)
         audio_layout.addLayout(output_row)
-        audio_layout.addStretch(1)
+        audio_layout.addSpacing(14)
+        models_caption = QLabel("创建歌曲模型", audio_panel)
+        models_caption.setObjectName("settingsFieldLabel")
+        audio_layout.addWidget(models_caption)
+        models_hint = QLabel("按用途准备本机资源，不显示具体模型名称", audio_panel)
+        models_hint.setObjectName("settingsPanelSubtitle")
+        models_hint.setWordWrap(True)
+        audio_layout.addWidget(models_hint)
+        self._model_rows: dict[str, ModelRoleRow] = {}
+        self._model_busy_key: str | None = None
+        self.model_list = QFrame(audio_panel)
+        self.model_list.setObjectName("settingsModelList")
+        model_list_layout = QVBoxLayout(self.model_list)
+        model_list_layout.setContentsMargins(8, 8, 8, 8)
+        model_list_layout.setSpacing(4)
+        audio_layout.addWidget(self.model_list, 1)
         workspace.addWidget(audio_panel)
 
         display_panel = QFrame(self)
@@ -404,8 +476,32 @@ class SettingsPage(QWidget):
         self.audience_font_combo.blockSignals(False)
         self._update_audience_font_preview()
 
-    def show_status(self, message: str) -> None:
-        self.status_label.setText(public_message(message, "设置操作失败，请重试"))
+    def set_model_statuses(
+        self,
+        statuses: tuple[ModelRoleStatus, ...] | list[ModelRoleStatus],
+        busy_key: str | None = None,
+    ) -> None:
+        self._model_busy_key = busy_key
+        layout = self.model_list.layout()
+        assert isinstance(layout, QVBoxLayout)
+        known = {status.key for status in statuses}
+        for key, row in list(self._model_rows.items()):
+            if key not in known:
+                layout.removeWidget(row)
+                row.deleteLater()
+                del self._model_rows[key]
+        for status in statuses:
+            row = self._model_rows.get(status.key)
+            if row is None:
+                row = ModelRoleRow(self.model_list)
+                row.download_requested.connect(self.model_download_requested)
+                self._model_rows[status.key] = row
+                layout.addWidget(row)
+            row.set_status(status, busy_key)
+
+    def show_status(self, message: str, *, trusted: bool = False) -> None:
+        text = message if trusted else public_message(message, "设置操作失败，请重试")
+        self.status_label.setText(text)
         self.status_label.setVisible(bool(message))
 
     def showEvent(self, event: QShowEvent) -> None:

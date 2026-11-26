@@ -1,11 +1,13 @@
 # SPDX-FileCopyrightText: 2026 DX Band
 # SPDX-License-Identifier: GPL-3.0-only
 
+import queue
 import threading
 from dataclasses import replace
 from pathlib import Path
+from typing import Any
 
-from PySide6.QtCore import QEvent, QObject, QSize, Qt, Signal
+from PySide6.QtCore import QEvent, QObject, QSize, Qt, QTimer, Signal
 from PySide6.QtGui import QCloseEvent, QIcon, QKeyEvent
 from PySide6.QtWidgets import (
     QAbstractSpinBox,
@@ -27,6 +29,11 @@ from PySide6.QtWidgets import (
 
 from dxband import __version__
 from dxband.audio.output_device import AudioOutputDevice, list_output_devices
+from dxband.creation.model_download import (
+    download_missing_model,
+    list_model_role_status,
+    model_role,
+)
 from dxband.creation.package_validator import SongPackage
 from dxband.resource_paths import CONTROL_ICON_ROOT
 from dxband.services.library_service import LibraryService
@@ -243,6 +250,15 @@ class MainWindow(QMainWindow):
             self._background_video_settings_changed
         )
         self.settings_page.refresh_output_devices_requested.connect(self._refresh_output_devices)
+        self.settings_page.model_download_requested.connect(self._download_model)
+        self._model_download_messages: queue.SimpleQueue[tuple[str, Any]] = queue.SimpleQueue()
+        self._model_download_thread: threading.Thread | None = None
+        self._model_download_key: str | None = None
+        self._model_download_timer = QTimer(self)
+        self._model_download_timer.setInterval(100)
+        self._model_download_timer.timeout.connect(self._drain_model_download_messages)
+        self._model_download_timer.start()
+        self._refresh_model_statuses()
         self.settings_page.background_video_upload_requested.connect(self._upload_background_video)
         self.background_video_imported.connect(self._background_video_imported)
         self.background_video_import_failed.connect(self._background_video_import_failed)
@@ -343,6 +359,72 @@ class MainWindow(QMainWindow):
         self.pages.setCurrentWidget(page)
         if page is self.playback_page:
             self._refresh_playlist()
+        elif page is self.settings_page:
+            self._refresh_model_statuses()
+
+    def _refresh_model_statuses(self) -> None:
+        self.settings_page.set_model_statuses(
+            list_model_role_status(),
+            busy_key=self._model_download_key,
+        )
+
+    def _download_model(self, key: str) -> None:
+        if self._model_download_thread is not None and self._model_download_thread.is_alive():
+            self.settings_page.show_status("已有资源正在下载，请稍候", trusted=True)
+            return
+        try:
+            role = model_role(key)
+        except ValueError:
+            self.settings_page.show_status("无法识别要下载的资源", trusted=True)
+            return
+        self._model_download_key = key
+        self._refresh_model_statuses()
+        self.settings_page.show_status(f"正在下载{role.label}…", trusted=True)
+        self._model_download_thread = threading.Thread(
+            target=self._download_model_in_background,
+            args=(key,),
+            name=f"model-download-{key}",
+            daemon=True,
+        )
+        self._model_download_thread.start()
+
+    def _download_model_in_background(self, key: str) -> None:
+        try:
+            download_missing_model(
+                key,
+                on_progress=lambda stage, ratio: self._model_download_messages.put(
+                    ("progress", (stage, ratio))
+                ),
+            )
+            self._model_download_messages.put(("completed", key))
+        except Exception as exc:
+            self._model_download_messages.put(("failed", str(exc)))
+
+    def _drain_model_download_messages(self) -> None:
+        while True:
+            try:
+                event, payload = self._model_download_messages.get_nowait()
+            except queue.Empty:
+                return
+            if event == "progress" and isinstance(payload, tuple):
+                stage, ratio = payload
+                message = str(stage)
+                if isinstance(ratio, float):
+                    message = f"{message}（{round(ratio * 100)}%）"
+                self.settings_page.show_status(message, trusted=True)
+            elif event == "completed":
+                key = str(payload)
+                self._model_download_key = None
+                self._refresh_model_statuses()
+                try:
+                    label = model_role(key).label
+                except ValueError:
+                    label = "创建资源"
+                self.settings_page.show_status(f"{label}已就绪，可以继续创建歌曲", trusted=True)
+            elif event == "failed":
+                self._model_download_key = None
+                self._refresh_model_statuses()
+                self.settings_page.show_status("下载失败，请稍后重试或检查网络", trusted=True)
 
     def _navigation_index(self, page: QWidget) -> int:
         return self._navigation_pages.index(page)

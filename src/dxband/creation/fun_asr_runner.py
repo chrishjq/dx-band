@@ -13,10 +13,13 @@ import time
 from pathlib import Path
 
 from dxband.creation.cancellation import CancellationToken
-from dxband.services.application_paths import default_application_data_root
+from dxband.creation.model_download import (
+    MODEL_CODE_SHA256,
+    fun_asr_code_bundle_present,
+    fun_asr_code_path,
+    fun_asr_model_dir,
+)
 from dxband.workers.command import subprocess_creation_flags
-
-MODEL_CODE_SHA256 = "223e24104889df1bd5d7f85fa7584233ad31936ea43b0c57afde37a3d9c90da5"
 
 
 class FunAsrRunner:
@@ -26,16 +29,37 @@ class FunAsrRunner:
     ) -> None:
         configured = python or os.environ.get("DX_BAND_FUN_ASR_PYTHON")
         self.python = Path(configured) if configured else Path(sys.executable)
+        self._explicit_code = model_code is not None
+        self._explicit_model_dir = model_dir is not None
         code = model_code or os.environ.get("DX_BAND_FUN_ASR_MODEL_CODE")
-        self.managed_code = code is None
-        self.model_code = Path(code).expanduser() if code else (
-            default_application_data_root() / "Fun-ASR" / "model.py"
-        )
-        directory = model_dir or os.environ.get("DX_BAND_FUN_ASR_MODEL_DIR")
-        self.model_dir = Path(directory).expanduser() if directory else None
+        self.managed_code = model_code is None and os.environ.get(
+            "DX_BAND_FUN_ASR_MODEL_CODE"
+        ) is None
+        self.model_code = Path(code).expanduser() if code else fun_asr_code_path()
+        self.model_dir = Path(model_dir).expanduser() if model_dir is not None else None
+        self._resolve_paths()
+
+    def _resolve_paths(self) -> None:
+        if not self._explicit_code:
+            override = os.environ.get("DX_BAND_FUN_ASR_MODEL_CODE")
+            self.managed_code = override is None
+            self.model_code = (
+                Path(override).expanduser() if override else fun_asr_code_path()
+            )
+        if self._explicit_model_dir:
+            return
+        if os.environ.get("DX_BAND_FUN_ASR_MODEL_DIR"):
+            self.model_dir = Path(os.environ["DX_BAND_FUN_ASR_MODEL_DIR"]).expanduser()
+            return
+        managed = fun_asr_model_dir()
+        self.model_dir = managed if any(
+            (managed / name).is_file() for name in ("configuration.json", "config.yaml")
+        ) else None
 
     def _prepare_code(self) -> None:
-        if not self.model_code.is_file():
+        if not self.model_code.is_file() or not fun_asr_code_bundle_present(
+            self.model_code.parent
+        ):
             raise RuntimeError(
                 "缺少 Fun-ASR 模型代码；请从 https://github.com/QwenAudio/Fun-ASR "
                 "自行获取，并设置 DX_BAND_FUN_ASR_MODEL_CODE"
@@ -46,6 +70,7 @@ class FunAsrRunner:
             raise RuntimeError("Fun-ASR 模型代码版本与当前程序不一致")
 
     def check_ready(self) -> None:
+        self._resolve_paths()
         if not self.python.is_file():
             raise RuntimeError(f"Fun-ASR Python 环境不存在：{self.python}")
         if self.model_dir is None or not self.model_dir.is_dir() or not any(
