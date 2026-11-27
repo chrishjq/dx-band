@@ -36,6 +36,7 @@ from dxband.creation.model_download import (
 )
 from dxband.creation.package_validator import SongPackage
 from dxband.resource_paths import CONTROL_ICON_ROOT
+from dxband.services.ffmpeg_tools import download_ffmpeg, ffmpeg_status
 from dxband.services.library_service import LibraryService
 from dxband.services.playlist_service import PlaylistService
 from dxband.ui.branding import APP_WINDOW_TITLE, application_icon, sidebar_logo
@@ -251,6 +252,7 @@ class MainWindow(QMainWindow):
         )
         self.settings_page.refresh_output_devices_requested.connect(self._refresh_output_devices)
         self.settings_page.model_download_requested.connect(self._download_model)
+        self.settings_page.ffmpeg_download_requested.connect(self._download_ffmpeg)
         self._model_download_messages: queue.SimpleQueue[tuple[str, Any]] = queue.SimpleQueue()
         self._model_download_thread: threading.Thread | None = None
         self._model_download_key: str | None = None
@@ -363,10 +365,52 @@ class MainWindow(QMainWindow):
             self._refresh_model_statuses()
 
     def _refresh_model_statuses(self) -> None:
+        busy_key = self._model_download_key
+        self.settings_page.set_ffmpeg_status(
+            ffmpeg_status(),
+            busy=busy_key == "ffmpeg",
+            blocked=busy_key is not None and busy_key != "ffmpeg",
+        )
         self.settings_page.set_model_statuses(
             list_model_role_status(),
-            busy_key=self._model_download_key,
+            busy_key=busy_key,
         )
+
+    def _download_ffmpeg(self) -> None:
+        if self._model_download_thread is not None and self._model_download_thread.is_alive():
+            self.settings_page.show_status("已有资源正在下载，请稍候", trusted=True)
+            return
+        status = ffmpeg_status()
+        if status.ready:
+            self.settings_page.show_status("FFmpeg 已就绪", trusted=True)
+            self._refresh_model_statuses()
+            return
+        if not status.download_supported:
+            self.settings_page.show_status(
+                "当前系统不支持应用内下载 FFmpeg，请先自行安装",
+                trusted=True,
+            )
+            return
+        self._model_download_key = "ffmpeg"
+        self._refresh_model_statuses()
+        self.settings_page.show_status("正在下载 FFmpeg…", trusted=True)
+        self._model_download_thread = threading.Thread(
+            target=self._download_ffmpeg_in_background,
+            name="ffmpeg-download",
+            daemon=True,
+        )
+        self._model_download_thread.start()
+
+    def _download_ffmpeg_in_background(self) -> None:
+        try:
+            download_ffmpeg(
+                on_progress=lambda stage, ratio: self._model_download_messages.put(
+                    ("progress", (stage, ratio))
+                ),
+            )
+            self._model_download_messages.put(("completed", "ffmpeg"))
+        except Exception as exc:
+            self._model_download_messages.put(("failed", str(exc)))
 
     def _download_model(self, key: str) -> None:
         if self._model_download_thread is not None and self._model_download_thread.is_alive():
@@ -416,10 +460,13 @@ class MainWindow(QMainWindow):
                 key = str(payload)
                 self._model_download_key = None
                 self._refresh_model_statuses()
-                try:
-                    label = model_role(key).label
-                except ValueError:
-                    label = "创建资源"
+                if key == "ffmpeg":
+                    label = "FFmpeg"
+                else:
+                    try:
+                        label = model_role(key).label
+                    except ValueError:
+                        label = "创建资源"
                 self.settings_page.show_status(f"{label}已就绪，可以继续创建歌曲", trusted=True)
             elif event == "failed":
                 self._model_download_key = None

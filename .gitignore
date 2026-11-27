@@ -11,6 +11,7 @@ __pycache__/
 build/
 dist/
 *.egg-info/
+*.spec.bak
 
 # Promotional video source is kept; captured media and rendered outputs are generated.
 /promo-output/*

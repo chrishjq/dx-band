@@ -3,6 +3,9 @@
 
 """The public source version."""
 
+from __future__ import annotations
+
+import json
 import re
 import tomllib
 from datetime import date
@@ -24,10 +27,26 @@ def release_version_tuple(value: str) -> tuple[int, ...]:
     return parts
 
 
+def _read_build_info_version(path: Path) -> str | None:
+    if not path.is_file():
+        return None
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        version = str(payload["version"])
+        release_version_tuple(version)
+        return version
+    except (OSError, KeyError, TypeError, ValueError, json.JSONDecodeError):
+        return None
+
+
 def _source_version() -> str:
+    package_dir = Path(__file__).resolve().parent
+    embedded = _read_build_info_version(package_dir / "_build_info.json")
+    if embedded is not None:
+        return embedded
     try:
         project = tomllib.loads(
-            (Path(__file__).resolve().parents[2] / "pyproject.toml").read_text(encoding="utf-8")
+            (package_dir.parents[1] / "pyproject.toml").read_text(encoding="utf-8")
         )
         version = str(project["project"]["version"])
         release_version_tuple(version)

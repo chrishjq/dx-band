@@ -39,6 +39,9 @@ dev = [
   "pytest-qt>=4",
   "ruff>=0.8",
 ]
+packaging = [
+  "pyinstaller>=6.11,<7",
+]
 
 [project.scripts]
 dx-band = "dxband.__main__:main"

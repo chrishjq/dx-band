@@ -47,6 +47,10 @@ def test_creation_errors_point_to_settings_download_by_role() -> None:
         assert "Fun-ASR" not in visible
         assert "DX_BAND_" not in visible
     assert creation_error_message("Beat This! 模型无法启动") == "歌曲处理失败，请重试"
+    assert (
+        creation_error_message("未找到 FFmpeg。请到设置页下载到本机后重试。")
+        == "未找到 FFmpeg。请到设置页下载到本机后重试。"
+    )
 
 
 def test_other_pages_do_not_show_backend_names(qtbot: QtBot) -> None:

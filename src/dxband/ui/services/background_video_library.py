@@ -3,7 +3,6 @@
 
 import logging
 import os
-import shutil
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
@@ -12,6 +11,7 @@ from typing import ClassVar
 from PySide6.QtCore import QStandardPaths
 
 from dxband.resource_paths import BACKGROUND_VIDEO_ROOT
+from dxband.services.ffmpeg_tools import resolve_ffmpeg
 from dxband.workers.command import subprocess_creation_flags
 
 NO_BACKGROUND_ID = "none"
@@ -104,16 +104,16 @@ class BackgroundVideoLibrary:
             raise ValueError("选择的背景视频文件不存在")
         if source.suffix.lower() not in SUPPORTED_VIDEO_SUFFIXES:
             raise ValueError("仅支持 MP4、MOV、M4V 或 WebM 视频")
-        ffmpeg = shutil.which("ffmpeg")
+        ffmpeg = resolve_ffmpeg()
         if ffmpeg is None:
-            raise ValueError("当前环境缺少视频处理组件，无法优化背景视频")
+            raise ValueError("未找到 FFmpeg。请到设置页下载到本机后重试。")
         self.user_root.mkdir(parents=True, exist_ok=True)
         destination = self._available_destination(f"{source.stem}.mp4")
         temporary = destination.with_name(f".{destination.stem}.uploading.mp4")
         try:
             completed = subprocess.run(
                 [
-                    ffmpeg,
+                    str(ffmpeg),
                     "-hide_banner",
                     "-loglevel",
                     "error",

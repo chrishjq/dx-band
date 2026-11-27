@@ -25,6 +25,7 @@ from PySide6.QtWidgets import (
 
 from dxband.audio.output_device import AudioOutputDevice
 from dxband.creation.model_download import ModelRoleStatus
+from dxband.services.ffmpeg_tools import FFMPEG_DETAIL, FFMPEG_LABEL, FFmpegStatus
 from dxband.ui.page_layout import (
     BUTTON_ROW_SPACING,
     add_page_header,
@@ -98,6 +99,7 @@ class SettingsPage(QWidget):
     save_requested = Signal(object)
     language_changed = Signal(str)
     refresh_output_devices_requested = Signal()
+    ffmpeg_download_requested = Signal()
     background_video_upload_requested = Signal(object)
     background_video_delete_requested = Signal(str)
     audience_font_changed = Signal(str)
@@ -172,6 +174,20 @@ class SettingsPage(QWidget):
         self.refresh_output_devices_button.clicked.connect(self.refresh_output_devices_requested)
         output_row.addWidget(self.refresh_output_devices_button)
         audio_layout.addLayout(output_row)
+        audio_layout.addSpacing(14)
+        tools_caption = QLabel("运行组件", audio_panel)
+        tools_caption.setObjectName("settingsFieldLabel")
+        audio_layout.addWidget(tools_caption)
+        tools_hint = QLabel("创建与导入歌曲所需的本机工具", audio_panel)
+        tools_hint.setObjectName("settingsPanelSubtitle")
+        tools_hint.setWordWrap(True)
+        audio_layout.addWidget(tools_hint)
+        self.ffmpeg_row = ModelRoleRow(audio_panel)
+        self.ffmpeg_row.download_requested.connect(
+            lambda _key: self.ffmpeg_download_requested.emit()
+        )
+        audio_layout.addWidget(self.ffmpeg_row)
+        self._ffmpeg_busy = False
         audio_layout.addSpacing(14)
         models_caption = QLabel("创建歌曲模型", audio_panel)
         models_caption.setObjectName("settingsFieldLabel")
@@ -475,6 +491,48 @@ class SettingsPage(QWidget):
         self.audience_font_combo.setCurrentIndex(max(0, index))
         self.audience_font_combo.blockSignals(False)
         self._update_audience_font_preview()
+
+    def set_ffmpeg_status(
+        self,
+        status: FFmpegStatus,
+        *,
+        busy: bool = False,
+        blocked: bool = False,
+    ) -> None:
+        self._ffmpeg_busy = busy
+        if busy:
+            row_status = ModelRoleStatus(
+                key="ffmpeg",
+                label=FFMPEG_LABEL,
+                detail=FFMPEG_DETAIL,
+                ready=False,
+            )
+            self.ffmpeg_row.set_status(row_status, busy_key="ffmpeg")
+            return
+        detail = FFMPEG_DETAIL
+        if status.ready and status.source == "system":
+            detail = "本机已安装，可直接使用"
+        elif status.ready and status.source == "managed":
+            detail = "已下载到本机应用目录"
+        elif status.ready and status.source == "bundled":
+            detail = "已随安装包提供"
+        elif not status.download_supported:
+            detail = "请先自行安装 FFmpeg 并确保可在终端调用"
+        row_status = ModelRoleStatus(
+            key="ffmpeg",
+            label=FFMPEG_LABEL,
+            detail=detail,
+            ready=status.ready,
+        )
+        self.ffmpeg_row.set_status(row_status, busy_key=None)
+        if status.ready:
+            self.ffmpeg_row.download_button.setEnabled(False)
+            self.ffmpeg_row.download_button.setText("已就绪")
+        elif not status.download_supported:
+            self.ffmpeg_row.download_button.setEnabled(False)
+            self.ffmpeg_row.download_button.setText("不可用")
+        elif blocked:
+            self.ffmpeg_row.download_button.setEnabled(False)
 
     def set_model_statuses(
         self,

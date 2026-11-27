@@ -30,6 +30,7 @@ from dxband.creation.sheetsage2_runner import SheetSage2Runner
 from dxband.creation.song_analysis import SongAnalysis, assemble_song_analysis
 from dxband.models.chord import ChordTimeline
 from dxband.models.lyric import LyricsDocument
+from dxband.services.ffmpeg_tools import resolve_ffmpeg
 from dxband.services.library_service import (
     DuplicateSongIdError,
     LibraryService,
@@ -455,7 +456,10 @@ class LibraryController(QObject):
         with tempfile.TemporaryDirectory(prefix="dx-band-full-analysis-") as workdir:
             root = Path(workdir)
             mixed = root / "full-mix.wav"
-            command = ["ffmpeg", "-nostdin", "-v", "error", "-y"]
+            ffmpeg = resolve_ffmpeg()
+            if ffmpeg is None:
+                raise RuntimeError("未找到 FFmpeg。请到设置页下载到本机后重试。")
+            command = [str(ffmpeg), "-nostdin", "-v", "error", "-y"]
             for stem in stems:
                 command.extend(("-i", str(stem)))
             command.extend((

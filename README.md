@@ -44,7 +44,15 @@ These are actual screen images featured on the project website.
 
 ![DX Band musician screen](docs/assets/dx-band-musician-screen.png)
 
-## Run locally
+## Installer (macOS Apple Silicon)
+
+Download `DX-Band-*-macos-arm64.dmg` from GitHub Releases, open it, and drag **DX Band** into Applications. The installer does not include AI model weights; before creating songs, open **Settings** in the app and download the models you need by role.
+
+If FFmpeg/ffprobe is missing, download it from **Settings → Runtime Tools** in the app, or install it yourself (for example `brew install ffmpeg`). Unsigned builds may require Open Anyway under System Settings → Privacy & Security on first launch.
+
+Maintainers can run `./scripts/build_macos_release.sh` from the repository root to produce the `.dmg`. Pushing a `v*` tag triggers GitHub Actions to build and upload only that `.dmg` to the Release.
+
+## Run from source
 
 You need Python 3.11 or 3.12, [uv](https://docs.astral.sh/uv/), and FFmpeg/ffprobe. Run these commands from the project root, where `pyproject.toml` is located:
 
@@ -56,7 +64,7 @@ uv run dx-band
 
 If FFmpeg is already installed, skip `brew install ffmpeg`. For later launches, run `uv run dx-band` from the project root.
 
-To create songs, obtain the required AI models from their original providers and place them on your computer. Model weights are not included in this repository. In the desktop app Settings page you can check readiness by role and download locally, or follow the [model setup guide](docs/model_self_setup.md) (Chinese). Basic tests and playback of existing songs do not require model downloads.
+To create songs, obtain the required AI models from their original providers and place them on your computer. Model weights are not included in this repository or in the installer. In the desktop app Settings page you can check readiness by role and download locally, or follow the [model setup guide](docs/model_self_setup.md) (Chinese). Basic tests and playback of existing songs do not require model downloads.
 
 ## Usage notes
 

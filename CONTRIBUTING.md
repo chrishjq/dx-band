@@ -15,6 +15,7 @@
 - 节拍改进可先用[合成节拍基准](docs/beat_benchmark.md)生成没有版权负担的 WAV 与参考拍点，再报告同一模型版本下的前后精确率、召回率和 F1。
 - 需要真实 AI 推理时，按[用户自备模型方案](docs/model_self_setup.md)从原站自行准备模型。模型权重的许可和下载条件应单独遵守；基础测试不下载模型。
 - 当前发布按 macOS 本机验证；修改平台相关逻辑时，请说明实际验证的平台。
+- 打 macOS 安装包：`uv sync --extra ai --extra packaging` 后执行 `./scripts/build_macos_release.sh`，产物为 `.dmg`。安装包不含模型权重；推送 `v*` 标签时 Actions 只上传该 `.dmg` 到 Release。
 
 ## 提交与评审
 

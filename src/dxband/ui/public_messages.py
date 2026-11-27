@@ -23,6 +23,8 @@ def public_message(message: str, fallback: str) -> str:
 
 def creation_error_message(message: str) -> str:
     """Give source users fixed setup advice without showing arbitrary backend output."""
+    if "未找到 FFmpeg" in message:
+        return "未找到 FFmpeg。请到设置页下载到本机后重试。"
     key = missing_model_download_key(message)
     if key is not None:
         role = model_role(key)

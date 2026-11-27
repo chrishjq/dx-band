@@ -4,6 +4,10 @@
 import subprocess
 import sys
 from collections.abc import Sequence
+from pathlib import Path
+
+from dxband.runtime_exec import EXEC_FLAG
+from dxband.services.bundle_paths import is_frozen
 
 
 def subprocess_creation_flags() -> int:
@@ -13,11 +17,48 @@ def subprocess_creation_flags() -> int:
     return 0
 
 
-def worker_command(worker: str, arguments: Sequence[str]) -> list[str]:
-    """通过当前 Python 环境启动源码 worker 子进程。"""
-    return [sys.executable, "-m", "dxband.workers", worker, *arguments]
+def _python_prefix(python: str | Path | None = None) -> list[str]:
+    executable = str(python) if python is not None else sys.executable
+    prefix = [executable]
+    if executable == sys.executable and is_frozen():
+        prefix.append(EXEC_FLAG)
+    return prefix
 
 
-def python_module_command(module: str, arguments: Sequence[str]) -> list[str]:
-    """通过当前 Python 环境启动模块命令。"""
-    return [sys.executable, "-m", module, *arguments]
+def worker_command(
+    worker: str,
+    arguments: Sequence[str],
+    *,
+    python: str | Path | None = None,
+) -> list[str]:
+    """通过当前 Python 环境或冻结应用启动 worker 子进程。"""
+    return [*_python_prefix(python), "-m", "dxband.workers", worker, *arguments]
+
+
+def python_module_command(
+    module: str,
+    arguments: Sequence[str],
+    *,
+    python: str | Path | None = None,
+) -> list[str]:
+    """通过当前 Python 环境或冻结应用启动模块命令。"""
+    return [*_python_prefix(python), "-m", module, *arguments]
+
+
+def python_code_command(
+    code: str,
+    *,
+    python: str | Path | None = None,
+) -> list[str]:
+    """通过当前 Python 环境或冻结应用执行一段代码。"""
+    return [*_python_prefix(python), "-c", code]
+
+
+def python_script_command(
+    script: Path | str,
+    arguments: Sequence[str],
+    *,
+    python: str | Path | None = None,
+) -> list[str]:
+    """通过当前 Python 环境或冻结应用执行脚本文件。"""
+    return [*_python_prefix(python), str(script), *arguments]

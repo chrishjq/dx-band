@@ -44,7 +44,15 @@ DX Band 是在本机运行的歌曲制作与舞台播放程序。它支持六轨
 
 ![DX Band 乐手屏](docs/assets/dx-band-musician-screen.png)
 
-## 本机运行
+## 安装包（macOS Apple Silicon）
+
+可从 GitHub Releases 下载 `DX-Band-*-macos-arm64.dmg`，打开后将 **DX Band** 拖入「应用程序」。安装包不含 AI 模型权重；首次创建歌曲前，请打开应用内「设置」，按用途下载所需模型。
+
+若本机还没有 FFmpeg/ffprobe，可在应用「设置 → 运行组件」中一键下载；也可自行安装（例如 `brew install ffmpeg`）。未签名的安装包首次打开时，可能需在「系统设置 → 隐私与安全性」中选择仍要打开。
+
+维护者可在仓库根目录执行 `./scripts/build_macos_release.sh` 本地打出 `.dmg`。推送 `v*` 标签时，GitHub Actions 会自动构建并只上传该 `.dmg` 到 Release。
+
+## 本机运行（源码）
 
 需要 Python 3.11 或 3.12、[uv](https://docs.astral.sh/uv/) 和 FFmpeg/ffprobe。请在包含 `pyproject.toml` 的项目根目录执行：
 
@@ -56,7 +64,7 @@ uv run dx-band
 
 在已经安装 FFmpeg 的系统上，可以跳过 `brew install ffmpeg`。日常启动只需在项目根目录运行 `uv run dx-band`。
 
-创建歌曲所需的 AI 模型由使用者从原站取得并放在本机；仓库不提供模型权重。可在应用「设置」页按用途查看就绪状态并下载，也可按[用户自备模型指南](docs/model_self_setup.md)手动配置。基础测试和播放现有歌曲不需要下载模型。
+创建歌曲所需的 AI 模型由使用者从原站取得并放在本机；仓库与安装包均不提供模型权重。可在应用「设置」页按用途查看就绪状态并下载，也可按[用户自备模型指南](docs/model_self_setup.md)手动配置。基础测试和播放现有歌曲不需要下载模型。
 
 ## 使用提示
 

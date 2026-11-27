@@ -2,12 +2,12 @@
 # SPDX-License-Identifier: GPL-3.0-only
 
 import json
-import shutil
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from dxband.services.ffmpeg_tools import resolve_ffprobe
 from dxband.workers.command import subprocess_creation_flags
 
 
@@ -27,13 +27,16 @@ class AudioMediaInfo:
 
 
 class MediaProbe:
-    def __init__(self, executable: str = "ffprobe") -> None:
+    def __init__(self, executable: str | None = None) -> None:
         self.executable = executable
 
     def probe_audio(self, path: Path) -> AudioMediaInfo:
-        executable = shutil.which(self.executable)
+        executable: str | None = self.executable
         if executable is None:
-            raise MediaProbeError("未找到 ffprobe，请先安装 FFmpeg")
+            resolved = resolve_ffprobe()
+            executable = str(resolved) if resolved is not None else None
+        if executable is None:
+            raise MediaProbeError("未找到 FFmpeg。请到设置页下载到本机后重试。")
         command = [
             executable,
             "-v",

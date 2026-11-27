@@ -14,7 +14,13 @@ from pathlib import Path
 from dxband.creation.cancellation import CancellationToken
 from dxband.creation.model_download import huggingface_home, sheetsage2_model_dir
 from dxband.services.application_paths import default_application_data_root
-from dxband.workers.command import subprocess_creation_flags
+from dxband.services.bundle_paths import helper_script
+from dxband.services.ffmpeg_tools import resolve_ffmpeg
+from dxband.workers.command import (
+    python_code_command,
+    python_script_command,
+    subprocess_creation_flags,
+)
 
 
 class SheetSage2Runner:
@@ -50,8 +56,15 @@ class SheetSage2Runner:
             raise RuntimeError(f"SheetSage2 Python 环境不存在：{self.python}")
         try:
             probe = subprocess.run(
-                [str(self.python), "-c", "import torch, transformers, mir_eval"],
-                stdin=subprocess.DEVNULL, capture_output=True, text=True, check=False, timeout=30,
+                python_code_command(
+                    "import torch, transformers, mir_eval",
+                    python=self.python,
+                ),
+                stdin=subprocess.DEVNULL,
+                capture_output=True,
+                text=True,
+                check=False,
+                timeout=30,
                 creationflags=subprocess_creation_flags(),
             )
         except (OSError, subprocess.TimeoutExpired) as exc:
@@ -68,9 +81,10 @@ class SheetSage2Runner:
         self.check_ready()
         output.mkdir(parents=True, exist_ok=True)
         wav = output / "source-24k.wav"
+        ffmpeg = self._ffmpeg_executable()
         try:
             self._run_process(
-                ["ffmpeg", "-nostdin", "-v", "error", "-y", "-i", str(source),
+                [ffmpeg, "-nostdin", "-v", "error", "-y", "-i", str(source),
                  "-ac", "1", "-ar", "24000", "-c:a", "pcm_s16le", str(wav)],
                 cancellation, output / "ffmpeg.log",
             )
@@ -89,10 +103,11 @@ class SheetSage2Runner:
             raise ValueError("SheetSage2 需要完整六轨")
         output.mkdir(parents=True, exist_ok=True)
         wav = output / "source-24k.wav"
+        ffmpeg = self._ffmpeg_executable()
         try:
             inputs = [part for stem in stems for part in ("-i", str(stem))]
             self._run_process(
-                ["ffmpeg", "-nostdin", "-v", "error", "-y", *inputs,
+                [ffmpeg, "-nostdin", "-v", "error", "-y", *inputs,
                  "-filter_complex", "amix=inputs=6:duration=longest:normalize=0,volume=0.5",
                  "-ac", "1", "-ar", "24000", "-c:a", "pcm_s16le", str(wav)],
                 cancellation, output / "ffmpeg.log",
@@ -102,20 +117,31 @@ class SheetSage2Runner:
             wav.unlink(missing_ok=True)
         return output
 
+    @staticmethod
+    def _ffmpeg_executable() -> str:
+        path = resolve_ffmpeg()
+        if path is None:
+            raise RuntimeError("未找到 FFmpeg。请到设置页下载到本机后重试。")
+        return str(path)
+
     def _transcribe(self, wav: Path, output: Path, cancellation: CancellationToken) -> None:
-        root = Path(__file__).resolve().parents[3]
-        script = root / "scripts" / "run_sheetsage2.py"
+        script = helper_script("run_sheetsage2.py")
         # SheetSage2 and MERT are provided by the user in a separate local cache.
         external_home = huggingface_home()
         environment = os.environ.copy()
         environment["HF_HOME"] = str(external_home)
         environment["HF_HUB_CACHE"] = str(external_home / "hub")
         environment["HF_HUB_OFFLINE"] = "1"
-        command = [str(self.python), str(script)]
+        command = python_script_command(
+            script,
+            [str(wav), str(output), "--model", str(self.model), "--device", "auto"],
+            python=self.python,
+        )
         self._run_process(
-            [*command, str(wav), str(output),
-             "--model", str(self.model), "--device", "auto"],
-            cancellation, output / "sheetsage2.log", environment,
+            command,
+            cancellation,
+            output / "sheetsage2.log",
+            environment,
         )
         if not (output / "events.json").is_file():
             raise RuntimeError("SheetSage2 未生成 events.json")

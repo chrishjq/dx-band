@@ -448,6 +448,22 @@ ENGLISH: dict[str, str] = {
     "语言已切换": "Language changed",
     "创建歌曲模型": "Song Creation Models",
     "按用途准备本机资源，不显示具体模型名称": "Prepare local resources by role; specific model names are hidden",
+    "运行组件": "Runtime Tools",
+    "创建与导入歌曲所需的本机工具": "Local tools required for creating and importing songs",
+    "转码与探测音频视频": "Transcode and probe audio/video",
+    "本机已安装，可直接使用": "Installed on this Mac; ready to use",
+    "已下载到本机应用目录": "Downloaded into the app data folder",
+    "已随安装包提供": "Included with the app package",
+    "请先自行安装 FFmpeg 并确保可在终端调用": "Install FFmpeg yourself and make sure it is on PATH",
+    "不可用": "Unavailable",
+    "FFmpeg 已就绪": "FFmpeg is ready",
+    "正在下载 FFmpeg…": "Downloading FFmpeg…",
+    "当前系统不支持应用内下载 FFmpeg，请先自行安装": (
+        "In-app FFmpeg download is not supported on this system; install it yourself first"
+    ),
+    "未找到 FFmpeg。请到设置页下载到本机后重试。": (
+        "FFmpeg was not found. Download it on the Settings page, then try again."
+    ),
     "下载": "Download",
     "下载中…": "Downloading…",
     "已下载": "Downloaded",

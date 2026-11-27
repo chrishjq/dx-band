@@ -87,9 +87,7 @@ class CreationPipeline:
             log = JobLog(job.workspace_dir)
             status = self.environment.inspect()
             if not status.ffmpeg_available:
-                raise RuntimeError(
-                    "未找到 FFmpeg，无法输出 320kbps MP3；macOS 请执行 brew install ffmpeg"
-                )
+                raise RuntimeError("未找到 FFmpeg。请到设置页下载到本机后重试。")
             if not status.demucs_available:
                 raise RuntimeError("未安装 Demucs，请执行 uv sync --extra ai --extra dev")
             self.score_runner.check_ready()

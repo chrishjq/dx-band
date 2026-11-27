@@ -19,7 +19,11 @@ from dxband.creation.model_download import (
     fun_asr_code_path,
     fun_asr_model_dir,
 )
-from dxband.workers.command import subprocess_creation_flags
+from dxband.workers.command import (
+    python_code_command,
+    python_module_command,
+    subprocess_creation_flags,
+)
 
 
 class FunAsrRunner:
@@ -83,8 +87,14 @@ class FunAsrRunner:
                 "自行获取，并设置 DX_BAND_FUN_ASR_MODEL_DIR"
             )
         probe = subprocess.run(
-            [str(self.python), "-c", "import funasr, librosa, soundfile"],
-            capture_output=True, text=True, check=False, timeout=30,
+            python_code_command(
+                "import funasr, librosa, soundfile",
+                python=self.python,
+            ),
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=30,
             creationflags=subprocess_creation_flags(),
         )
         if probe.returncode:
@@ -98,16 +108,28 @@ class FunAsrRunner:
         self.check_ready()
         output.mkdir(parents=True, exist_ok=True)
         destination = output / "raw_asr.json"
-        script = Path(__file__).with_name("fun_asr_infer.py")
         environment = os.environ.copy()
         environment["HF_HUB_OFFLINE"] = "1"
         environment["TRANSFORMERS_OFFLINE"] = "1"
+        command = python_module_command(
+            "dxband.creation.fun_asr_infer",
+            [
+                str(vocals),
+                str(destination),
+                "--model-code",
+                str(self.model_code),
+                "--device",
+                "cpu",
+                "--model-dir",
+                str(self.model_dir),
+                "--language",
+                "粤语" if language == "yue" else "中文",
+            ],
+            python=self.python,
+        )
         with (output / "fun_asr.log").open("w", encoding="utf-8") as log:
             process = subprocess.Popen(
-                [str(self.python), str(script), str(vocals), str(destination),
-                 "--model-code", str(self.model_code), "--device", "cpu",
-                 "--model-dir", str(self.model_dir),
-                 "--language", "粤语" if language == "yue" else "中文"],
+                command,
                 stdin=subprocess.DEVNULL, stdout=log, stderr=subprocess.STDOUT,
                 env=environment,
                 creationflags=subprocess_creation_flags(),

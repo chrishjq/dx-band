@@ -2,12 +2,11 @@
 # SPDX-License-Identifier: GPL-3.0-only
 
 import importlib.util
-import shutil
 import subprocess
-import sys
 from dataclasses import dataclass
 
-from dxband.workers.command import subprocess_creation_flags
+from dxband.services.ffmpeg_tools import resolve_ffmpeg, resolve_ffprobe
+from dxband.workers.command import python_code_command, subprocess_creation_flags
 
 
 @dataclass(frozen=True, slots=True)
@@ -25,8 +24,8 @@ class EnvironmentChecker:
     def inspect(self) -> EnvironmentStatus:
         torch_available = importlib.util.find_spec("torch") is not None
         return EnvironmentStatus(
-            ffmpeg_available=shutil.which("ffmpeg") is not None,
-            ffprobe_available=shutil.which("ffprobe") is not None,
+            ffmpeg_available=resolve_ffmpeg() is not None,
+            ffprobe_available=resolve_ffprobe() is not None,
             demucs_available=importlib.util.find_spec("demucs") is not None,
             ctc_segmentation_available=(
                 importlib.util.find_spec("ctc_segmentation") is not None
@@ -75,7 +74,7 @@ class EnvironmentChecker:
     def _run_torch_probe(code: str) -> bool:
         try:
             completed = subprocess.run(
-                [sys.executable, "-c", code],
+                python_code_command(code),
                 stdin=subprocess.DEVNULL,
                 capture_output=True,
                 text=True,

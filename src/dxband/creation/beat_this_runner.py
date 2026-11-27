@@ -14,7 +14,12 @@ from pathlib import Path
 from dxband.creation.cancellation import CancellationToken
 from dxband.creation.model_download import beat_this_checkpoint_path
 from dxband.services.application_paths import default_application_data_root
-from dxband.workers.command import subprocess_creation_flags
+from dxband.services.bundle_paths import helper_script
+from dxband.workers.command import (
+    python_code_command,
+    python_script_command,
+    subprocess_creation_flags,
+)
 
 
 class BeatThisRunner:
@@ -54,7 +59,10 @@ class BeatThisRunner:
             raise RuntimeError(f"Beat This! Python 环境不存在：{self.python}")
         try:
             probe = subprocess.run(
-                [str(self.python), "-c", "import beat_this, torch, torchaudio, soxr"],
+                python_code_command(
+                    "import beat_this, torch, torchaudio, soxr",
+                    python=self.python,
+                ),
                 stdin=subprocess.DEVNULL,
                 capture_output=True,
                 text=True,
@@ -71,21 +79,23 @@ class BeatThisRunner:
     def run(self, source: Path, output: Path, cancellation: CancellationToken) -> Path:
         self.check_ready()
         output.mkdir(parents=True, exist_ok=True)
-        root = Path(__file__).resolve().parents[3]
-        script = root / "scripts" / "run_beat_this.py"
+        script = helper_script("run_beat_this.py")
         destination = output / "beat_this.json"
-        command = [str(self.python), str(script)]
+        command = python_script_command(
+            script,
+            [
+                str(source),
+                str(destination),
+                "--checkpoint",
+                self.checkpoint,
+                "--device",
+                "auto",
+            ],
+            python=self.python,
+        )
         with (output / "beat_this.log").open("w", encoding="utf-8") as log:
             process = subprocess.Popen(
-                [
-                    *command,
-                    str(source),
-                    str(destination),
-                    "--checkpoint",
-                    self.checkpoint,
-                    "--device",
-                    "auto",
-                ],
+                command,
                 stdin=subprocess.DEVNULL,
                 stdout=log,
                 stderr=subprocess.STDOUT,
