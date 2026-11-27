@@ -127,6 +127,22 @@ QLabel#statusBar {
     padding: 8px 11px;
 }
 
+QProgressBar#settingsDownloadProgress {
+    min-height: 14px;
+    max-height: 14px;
+    border: 1px solid #2c323b;
+    border-radius: 4px;
+    background-color: #15191f;
+    text-align: center;
+    color: #c5cbd4;
+    font-size: 10px;
+}
+
+QProgressBar#settingsDownloadProgress::chunk {
+    background-color: #4f7eb8;
+    border-radius: 3px;
+}
+
 QLabel#currentLyric {
     color: #f4c34d;
     font-size: 18px;
@@ -303,7 +319,7 @@ QLabel#settingsModelStatus {
     color: #8d939d;
     font-size: 11px;
     font-weight: 600;
-    min-width: 42px;
+    min-width: 48px;
 }
 
 QLabel#settingsModelStatus[state="ready"] {

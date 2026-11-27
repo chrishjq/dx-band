@@ -14,7 +14,7 @@ DX Band 源码仓库不包含模型权重。创建歌曲前，请阅读各模型
 
 | 功能 | 模型来源与本地配置 |
 | --- | --- |
-| 音符与和弦分析 | 从 SheetSage2 和 MERT 模型页取得文件；设置 `DX_BAND_SHEETSAGE2_MODEL_DIR` 指向 SheetSage2 目录，可用 `DX_BAND_SHEETSAGE2_HF_HOME` 指向包含 MERT 的 Hugging Face 缓存。 |
+| 音符与和弦分析 | 设置页会优先从 [魔搭 SheetSage2](https://www.modelscope.cn/models/m-a-p/SheetSage2) / [MERT](https://www.modelscope.cn/models/m-a-p/MERT-v2-FullSong) 下载到本机（国内 CDN）；失败时再试 HF 镜像。也可自行放置：`DX_BAND_SHEETSAGE2_MODEL_DIR` 指向 SheetSage2 目录，`DX_BAND_MERT_MODEL_DIR` 指向 MERT 目录，或用 `DX_BAND_SHEETSAGE2_HF_HOME` 指向含 MERT 的 Hugging Face 缓存。 |
 | 六轨分离 | 从 HTDemucs-6s 模型页取得 `htdemucs_6s.yaml` 与 `5c90dfd2.safetensors`，放入标准 Hugging Face 缓存。 |
 | 中文、英文和粤语歌词对齐 | 使用下方命令将对应 CTC 模型放入标准 Hugging Face 缓存；也可设置 `DX_BAND_ALIGNER_ZH_MODEL_DIR`、`DX_BAND_ALIGNER_EN_MODEL_DIR`、`DX_BAND_ALIGNER_YUE_MODEL_DIR` 指向本地模型目录。 |
 | 节拍分析 | 从 [Beat This!](https://github.com/CPJKU/beat_this) 取得 `final0` checkpoint，设置 `DX_BAND_BEAT_THIS_CHECKPOINT` 指向本地文件。 |
@@ -29,6 +29,8 @@ uv run hf download parseh/aligner-en --revision c0f8960268a23db8e3705ef24d3236e4
 uv run hf download ctl/wav2vec2-large-xlsr-cantonese --revision 11cb21cb68b4ed15f4c6633494ae6cc90a89bc34
 ```
 
-也可在桌面应用的「设置」页查看各功能资源是否就绪，并按用途一键下载到本机默认目录。设置页只显示功能名称（如节拍模型、歌词适配模型），不展示具体上游模型名。下载仍表示你同意遵守各模型原站许可。
+也可在桌面应用的「设置 → 创建所需资源」查看各功能资源是否就绪，并点击「下载缺失资源」一次性安装多媒体组件与缺失模型。设置页只显示功能名称（如节拍模型、歌词适配模型），不展示具体上游模型名。下载仍表示你同意遵守各模型原站许可。
+
+下载顺序：优先公共节点（魔搭、GitHub 代理、HF 镜像等）；仅当公共节点失败时，才回退到国内静态备用节点（`DX_BAND_MODEL_MIRROR`，默认 `http://106.55.161.238/dxband-models`）。设为 `0` 可禁用备用节点以完全不走该服务器。
 
 准备好所需模型后，在项目根目录执行 `uv run dx-band`。基础测试和播放已有歌曲不需要模型权重。

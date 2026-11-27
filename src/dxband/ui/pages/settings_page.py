@@ -16,6 +16,7 @@ from PySide6.QtWidgets import (
     QLineEdit,
     QListWidget,
     QListWidgetItem,
+    QProgressBar,
     QPushButton,
     QSizePolicy,
     QStackedWidget,
@@ -41,8 +42,6 @@ from dxband.ui.services.settings_service import (
 
 
 class ModelRoleRow(QWidget):
-    download_requested = Signal(str)
-
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self._key = ""
@@ -62,35 +61,34 @@ class ModelRoleRow(QWidget):
         self.status_label.setObjectName("settingsModelStatus")
         self.status_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         layout.addWidget(self.status_label)
-        self.download_button = QPushButton("下载", self)
-        self.download_button.setObjectName("settingsCompactButton")
-        self.download_button.clicked.connect(self._request_download)
-        layout.addWidget(self.download_button)
 
-    def _request_download(self) -> None:
-        if self._key:
-            self.download_requested.emit(self._key)
-
-    def set_status(self, status: ModelRoleStatus, busy_key: str | None = None) -> None:
+    def set_status(
+        self,
+        status: ModelRoleStatus,
+        busy_key: str | None = None,
+        progress_ratio: float | None = None,
+        *,
+        status_override: str | None = None,
+    ) -> None:
         self._key = status.key
         self.title_label.setText(status.label)
         self.detail_label.setText(status.detail)
         downloading = busy_key == status.key
         if downloading:
-            self.status_label.setText("下载中")
+            if isinstance(progress_ratio, float):
+                self.status_label.setText(f"{round(progress_ratio * 100)}%")
+            else:
+                self.status_label.setText("下载中")
             self.status_label.setProperty("state", "busy")
-            self.download_button.setEnabled(False)
-            self.download_button.setText("下载中…")
         elif status.ready:
             self.status_label.setText("已就绪")
             self.status_label.setProperty("state", "ready")
-            self.download_button.setEnabled(False)
-            self.download_button.setText("已下载")
+        elif status_override:
+            self.status_label.setText(status_override)
+            self.status_label.setProperty("state", "missing")
         else:
             self.status_label.setText("未下载")
             self.status_label.setProperty("state", "missing")
-            self.download_button.setEnabled(busy_key is None)
-            self.download_button.setText("下载")
         self.status_label.style().unpolish(self.status_label)
         self.status_label.style().polish(self.status_label)
 
@@ -99,11 +97,10 @@ class SettingsPage(QWidget):
     save_requested = Signal(object)
     language_changed = Signal(str)
     refresh_output_devices_requested = Signal()
-    ffmpeg_download_requested = Signal()
+    missing_resources_download_requested = Signal()
     background_video_upload_requested = Signal(object)
     background_video_delete_requested = Signal(str)
     audience_font_changed = Signal(str)
-    model_download_requested = Signal(str)
 
     def __init__(self) -> None:
         super().__init__()
@@ -175,27 +172,22 @@ class SettingsPage(QWidget):
         output_row.addWidget(self.refresh_output_devices_button)
         audio_layout.addLayout(output_row)
         audio_layout.addSpacing(14)
-        tools_caption = QLabel("运行组件", audio_panel)
-        tools_caption.setObjectName("settingsFieldLabel")
-        audio_layout.addWidget(tools_caption)
-        tools_hint = QLabel("创建与导入歌曲所需的本机工具", audio_panel)
-        tools_hint.setObjectName("settingsPanelSubtitle")
-        tools_hint.setWordWrap(True)
-        audio_layout.addWidget(tools_hint)
-        self.ffmpeg_row = ModelRoleRow(audio_panel)
-        self.ffmpeg_row.download_requested.connect(
-            lambda _key: self.ffmpeg_download_requested.emit()
+        resources_caption = QLabel("创建所需资源", audio_panel)
+        resources_caption.setObjectName("settingsFieldLabel")
+        audio_layout.addWidget(resources_caption)
+        resources_hint = QLabel(
+            "一键下载并安装缺失的多媒体组件与模型，不显示具体模型名称",
+            audio_panel,
         )
-        audio_layout.addWidget(self.ffmpeg_row)
+        resources_hint.setObjectName("settingsPanelSubtitle")
+        resources_hint.setWordWrap(True)
+        audio_layout.addWidget(resources_hint)
+        self.download_missing_button = QPushButton("下载缺失资源", audio_panel)
+        self.download_missing_button.setObjectName("settingsCompactButton")
+        self.download_missing_button.clicked.connect(self.missing_resources_download_requested)
+        audio_layout.addWidget(self.download_missing_button)
         self._ffmpeg_busy = False
-        audio_layout.addSpacing(14)
-        models_caption = QLabel("创建歌曲模型", audio_panel)
-        models_caption.setObjectName("settingsFieldLabel")
-        audio_layout.addWidget(models_caption)
-        models_hint = QLabel("按用途准备本机资源，不显示具体模型名称", audio_panel)
-        models_hint.setObjectName("settingsPanelSubtitle")
-        models_hint.setWordWrap(True)
-        audio_layout.addWidget(models_hint)
+        self._has_missing_resources = False
         self._model_rows: dict[str, ModelRoleRow] = {}
         self._model_busy_key: str | None = None
         self.model_list = QFrame(audio_panel)
@@ -203,6 +195,8 @@ class SettingsPage(QWidget):
         model_list_layout = QVBoxLayout(self.model_list)
         model_list_layout.setContentsMargins(8, 8, 8, 8)
         model_list_layout.setSpacing(4)
+        self.ffmpeg_row = ModelRoleRow(self.model_list)
+        model_list_layout.addWidget(self.ffmpeg_row)
         audio_layout.addWidget(self.model_list, 1)
         workspace.addWidget(audio_panel)
 
@@ -347,12 +341,21 @@ class SettingsPage(QWidget):
         self.upload_background_button.clicked.connect(self._choose_background_video)
         self.delete_background_button.clicked.connect(self._request_background_delete)
 
+        self.download_progress = QProgressBar(self)
+        self.download_progress.setObjectName("settingsDownloadProgress")
+        self.download_progress.setRange(0, 100)
+        self.download_progress.setValue(0)
+        self.download_progress.setTextVisible(True)
+        self.download_progress.setFormat("%p%")
+        self.download_progress.hide()
+        layout.addWidget(self.download_progress)
         self.status_label = QLabel("", self)
         self.status_label.setObjectName("statusBar")
         self.status_label.setWordWrap(True)
         self.status_label.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self.status_label.hide()
         layout.addWidget(self.status_label)
+        self._download_progress_ratio: float | None = None
         self._screen_values = ("", "", 0, 150, "", 0)
         self._background_preview_panel.installEventFilter(self)
 
@@ -499,47 +502,49 @@ class SettingsPage(QWidget):
         busy: bool = False,
         blocked: bool = False,
     ) -> None:
+        del blocked  # Kept for call-site compatibility; unified download owns enablement.
         self._ffmpeg_busy = busy
-        if busy:
-            row_status = ModelRoleStatus(
-                key="ffmpeg",
-                label=FFMPEG_LABEL,
-                detail=FFMPEG_DETAIL,
-                ready=False,
-            )
-            self.ffmpeg_row.set_status(row_status, busy_key="ffmpeg")
-            return
         detail = FFMPEG_DETAIL
+        status_override: str | None = None
         if status.ready and status.source == "system":
             detail = "本机已安装，可直接使用"
         elif status.ready and status.source == "managed":
             detail = "已下载到本机应用目录"
         elif status.ready and status.source == "bundled":
             detail = "已随安装包提供"
-        elif not status.download_supported:
-            detail = "请先自行安装 FFmpeg 并确保可在终端调用"
+        elif status.managed_present:
+            detail = "已下载但未生效，下载缺失资源时会自动修复"
+            status_override = "需修复"
+        elif status.download_supported:
+            detail = "转码与探测音频视频"
+        else:
+            detail = "请先自行安装并确保可在终端调用"
+            status_override = "不可用"
         row_status = ModelRoleStatus(
             key="ffmpeg",
             label=FFMPEG_LABEL,
             detail=detail,
             ready=status.ready,
         )
-        self.ffmpeg_row.set_status(row_status, busy_key=None)
-        if status.ready:
-            self.ffmpeg_row.download_button.setEnabled(False)
-            self.ffmpeg_row.download_button.setText("已就绪")
-        elif not status.download_supported:
-            self.ffmpeg_row.download_button.setEnabled(False)
-            self.ffmpeg_row.download_button.setText("不可用")
-        elif blocked:
-            self.ffmpeg_row.download_button.setEnabled(False)
+        self.ffmpeg_row.set_status(
+            row_status,
+            busy_key="ffmpeg" if busy else None,
+            progress_ratio=self._download_progress_ratio if busy else None,
+            status_override=status_override,
+        )
+        self._refresh_download_missing_button()
 
     def set_model_statuses(
         self,
         statuses: tuple[ModelRoleStatus, ...] | list[ModelRoleStatus],
         busy_key: str | None = None,
+        *,
+        has_missing: bool | None = None,
     ) -> None:
         self._model_busy_key = busy_key
+        if busy_key is None:
+            self._download_progress_ratio = None
+            self.set_download_progress(None)
         layout = self.model_list.layout()
         assert isinstance(layout, QVBoxLayout)
         known = {status.key for status in statuses}
@@ -549,13 +554,87 @@ class SettingsPage(QWidget):
                 row.deleteLater()
                 del self._model_rows[key]
         for status in statuses:
-            row = self._model_rows.get(status.key)
-            if row is None:
+            existing = self._model_rows.get(status.key)
+            if existing is None:
                 row = ModelRoleRow(self.model_list)
-                row.download_requested.connect(self.model_download_requested)
                 self._model_rows[status.key] = row
                 layout.addWidget(row)
-            row.set_status(status, busy_key)
+            else:
+                row = existing
+            ratio = self._download_progress_ratio if busy_key == status.key else None
+            row.set_status(status, busy_key, progress_ratio=ratio)
+        if has_missing is not None:
+            self._has_missing_resources = has_missing
+        else:
+            self._has_missing_resources = any(not status.ready for status in statuses)
+        self._refresh_download_missing_button()
+
+    def set_resources_download_busy(self, busy: bool) -> None:
+        if busy:
+            self.download_missing_button.setEnabled(False)
+            self.download_missing_button.setText("下载中…")
+        else:
+            self._refresh_download_missing_button()
+
+    def _refresh_download_missing_button(self) -> None:
+        busy = self._ffmpeg_busy or (
+            self._model_busy_key is not None and self._model_busy_key != ""
+        )
+        if busy:
+            self.download_missing_button.setEnabled(False)
+            self.download_missing_button.setText("下载中…")
+            return
+        if self._has_missing_resources or self._ffmpeg_needs_action():
+            self.download_missing_button.setEnabled(True)
+            self.download_missing_button.setText("下载缺失资源")
+        else:
+            self.download_missing_button.setEnabled(False)
+            self.download_missing_button.setText("资源已就绪")
+
+    def _ffmpeg_needs_action(self) -> bool:
+        text = self.ffmpeg_row.status_label.text()
+        return text in {"未下载", "需修复", "不可用"}
+
+    def set_download_progress(self, ratio: float | None) -> None:
+        """Update the bottom download bar. ``None`` hides it; negative means busy."""
+        self._download_progress_ratio = ratio if isinstance(ratio, float) and ratio >= 0 else None
+        if ratio is None:
+            self.download_progress.hide()
+            self.download_progress.setRange(0, 100)
+            self.download_progress.setValue(0)
+            return
+        self.download_progress.show()
+        if ratio < 0:
+            self.download_progress.setRange(0, 0)
+            return
+        percent = max(0, min(100, round(ratio * 100)))
+        self.download_progress.setRange(0, 100)
+        self.download_progress.setValue(percent)
+
+    def update_busy_download_progress(self, ratio: float | None) -> None:
+        """Refresh the active row percentage without rebuilding the model list."""
+        if self._ffmpeg_busy:
+            target = self.ffmpeg_row.status_label
+        else:
+            busy_key = self._model_busy_key
+            if not busy_key or busy_key == "ffmpeg":
+                if ratio is None and self.download_progress.maximum() == 0:
+                    return
+                if isinstance(ratio, float) and ratio >= 0:
+                    # Keep the overall bar moving even between item switches.
+                    self.set_download_progress(ratio)
+                return
+            row = self._model_rows.get(busy_key)
+            if row is None:
+                return
+            target = row.status_label
+        if isinstance(ratio, float) and ratio >= 0:
+            target.setText(f"{round(ratio * 100)}%")
+        else:
+            target.setText("下载中")
+        target.setProperty("state", "busy")
+        target.style().unpolish(target)
+        target.style().polish(target)
 
     def show_status(self, message: str, *, trusted: bool = False) -> None:
         text = message if trusted else public_message(message, "设置操作失败，请重试")

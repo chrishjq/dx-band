@@ -24,4 +24,4 @@ Outputs:
 - `dist\DX-Band-<version>-windows-x64.zip`
 - `out\DX-Band-<version>-windows-x64.zip` — copy of the zip for handoff
 
-After unpacking a release zip, users open **Settings** to download creation models. FFmpeg should be installed separately on Windows until in-app download is available.
+After unpacking a release zip, users open **Settings → Creation Resources** and click **Download Missing Resources** to install multimedia tools and creation models when missing.

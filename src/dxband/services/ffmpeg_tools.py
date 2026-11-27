@@ -3,13 +3,14 @@
 
 """Locate, download, and expose managed FFmpeg / FFprobe binaries.
 
-System PATH installs remain preferred. When missing, macOS users can download a
-pinned ffmpeg-static build into the per-user application data directory from
-Settings. Model weights are unrelated and stay separate.
+System PATH installs remain preferred. When missing, macOS and Windows users
+can download a pinned ffmpeg-static build into the per-user application data
+directory from Settings. Model weights are unrelated and stay separate.
 """
 
 from __future__ import annotations
 
+import contextlib
 import gzip
 import hashlib
 import os
@@ -19,18 +20,18 @@ import subprocess
 import sys
 import tempfile
 import urllib.error
-import urllib.request
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
 from dxband.services.application_paths import default_application_data_root
 from dxband.services.bundle_paths import is_frozen, meipass_root
+from dxband.services.download_mirrors import urlopen_with_mirrors
 from dxband.workers.command import subprocess_creation_flags
 
 ProgressCallback = Callable[[str, float | None], None]
 
-FFMPEG_LABEL = "FFmpeg"
+FFMPEG_LABEL = "多媒体组件"
 FFMPEG_DETAIL = "转码与探测音频视频"
 
 # Pinned https://github.com/eugeneware/ffmpeg-static release assets.
@@ -38,8 +39,8 @@ FFMPEG_STATIC_VERSION = "b6.1.1"
 FFMPEG_STATIC_BASE = (
     f"https://github.com/eugeneware/ffmpeg-static/releases/download/{FFMPEG_STATIC_VERSION}"
 )
-_MAC_ASSETS: dict[str, dict[str, tuple[str, str]]] = {
-    "arm64": {
+_PLATFORM_ASSETS: dict[str, dict[str, tuple[str, str]]] = {
+    "darwin-arm64": {
         "ffmpeg": (
             f"{FFMPEG_STATIC_BASE}/ffmpeg-darwin-arm64.gz",
             "8923876afa8db5585022d7860ec7e589af192f441c56793971276d450ed3bbfa",
@@ -49,7 +50,7 @@ _MAC_ASSETS: dict[str, dict[str, tuple[str, str]]] = {
             "d986a8ec7b030899fe66a8a288ed809a3543338705a3ce178cfb85869c5d80be",
         ),
     },
-    "x86_64": {
+    "darwin-x86_64": {
         "ffmpeg": (
             f"{FFMPEG_STATIC_BASE}/ffmpeg-darwin-x64.gz",
             "929b375c1182d956c51f7ac25e0b2b0411fb01f6f407aa15c9758efeb4242106",
@@ -57,6 +58,16 @@ _MAC_ASSETS: dict[str, dict[str, tuple[str, str]]] = {
         "ffprobe": (
             f"{FFMPEG_STATIC_BASE}/ffprobe-darwin-x64.gz",
             "d4da574d6e2e197bd259b47d69cf262df9e312af24ad960444f6d806d3d4c186",
+        ),
+    },
+    "win32-x86_64": {
+        "ffmpeg": (
+            f"{FFMPEG_STATIC_BASE}/ffmpeg-win32-x64.gz",
+            "8883a3dffbd0a16cf4ef95206ea05283f78908dbfb118f73c83f4951dcc06d77",
+        ),
+        "ffprobe": (
+            f"{FFMPEG_STATIC_BASE}/ffprobe-win32-x64.gz",
+            "f309e6223ad89d2fe54bccd420a7709b66fd27540674e92309578ed491a43c8d",
         ),
     },
 }
@@ -69,6 +80,7 @@ class FFmpegStatus:
     ffmpeg_path: Path | None
     ffprobe_path: Path | None
     download_supported: bool
+    managed_present: bool = False
 
 
 def managed_bin_dir() -> Path:
@@ -93,6 +105,10 @@ def managed_ffmpeg_path() -> Path:
 def managed_ffprobe_path() -> Path:
     name = "ffprobe.exe" if sys.platform == "win32" else "ffprobe"
     return managed_bin_dir() / name
+
+
+def managed_binaries_present() -> bool:
+    return managed_ffmpeg_path().is_file() and managed_ffprobe_path().is_file()
 
 
 def resolve_ffmpeg() -> Path | None:
@@ -122,7 +138,8 @@ def ffmpeg_status() -> FFmpegStatus:
         source=source,
         ffmpeg_path=ffmpeg,
         ffprobe_path=ffprobe,
-        download_supported=_macos_asset_key() is not None,
+        download_supported=_asset_key() is not None,
+        managed_present=managed_binaries_present(),
     )
 
 
@@ -143,15 +160,52 @@ def ensure_ffmpeg_on_path() -> None:
         os.environ["PATH"] = os.pathsep.join((*merged, *existing))
 
 
-def download_ffmpeg(on_progress: ProgressCallback | None = None) -> Path:
-    """Download FFmpeg and FFprobe into the managed location (macOS only)."""
+def repair_ffmpeg(on_progress: ProgressCallback | None = None) -> Path:
+    """Fix permissions, quarantine, and PATH for an existing managed install."""
     progress = on_progress or (lambda _stage, _ratio: None)
-    asset_key = _macos_asset_key()
+    ffmpeg = managed_ffmpeg_path()
+    ffprobe = managed_ffprobe_path()
+    if not ffmpeg.is_file() or not ffprobe.is_file():
+        raise RuntimeError(f"{FFMPEG_LABEL}尚未下载到本机，请先处理安装")
+    progress(f"正在修复{FFMPEG_LABEL}", 0.2)
+    for path in (ffmpeg, ffprobe):
+        with contextlib.suppress(OSError):
+            path.chmod(0o755)
+        _clear_macos_quarantine(path)
+    progress(f"正在校验{FFMPEG_LABEL}", 0.6)
+    _verify_binary(ffmpeg, "ffmpeg")
+    _verify_binary(ffprobe, "ffprobe")
+    ensure_ffmpeg_on_path()
+    progress(f"{FFMPEG_LABEL}已就绪", 1.0)
+    return ffmpeg
+
+
+def ensure_ffmpeg_ready(on_progress: ProgressCallback | None = None) -> Path:
+    """Download when missing; otherwise repair the managed install and PATH."""
+    progress = on_progress or (lambda _stage, _ratio: None)
+    status = ffmpeg_status()
+    if status.ready:
+        ensure_ffmpeg_on_path()
+        progress(f"{FFMPEG_LABEL}已就绪", 1.0)
+        path = status.ffmpeg_path
+        assert path is not None
+        return path
+    if managed_binaries_present():
+        return repair_ffmpeg(on_progress=progress)
+    return download_ffmpeg(on_progress=progress)
+
+
+def download_ffmpeg(on_progress: ProgressCallback | None = None) -> Path:
+    """Download FFmpeg and FFprobe into the managed location."""
+    progress = on_progress or (lambda _stage, _ratio: None)
+    asset_key = _asset_key()
     if asset_key is None:
-        raise RuntimeError("当前系统暂不支持在应用内下载 FFmpeg，请先自行安装")
-    assets = _MAC_ASSETS[asset_key]
+        raise RuntimeError(f"当前系统暂不支持在应用内下载{FFMPEG_LABEL}，请先自行安装")
+    assets = _PLATFORM_ASSETS[asset_key]
     destination = managed_bin_dir()
     destination.mkdir(parents=True, exist_ok=True)
+    installed_ffmpeg = managed_ffmpeg_path()
+    installed_ffprobe = managed_ffprobe_path()
     with tempfile.TemporaryDirectory(prefix="dx-band-ffmpeg-") as temporary_root:
         temp_root = Path(temporary_root)
         progress(f"正在下载{FFMPEG_LABEL}", 0.05)
@@ -174,12 +228,10 @@ def download_ffmpeg(on_progress: ProgressCallback | None = None) -> Path:
             ratio_span=(0.45, 0.85),
         )
         progress(f"正在安装{FFMPEG_LABEL}", 0.9)
-        ffmpeg_raw = temp_root / "ffmpeg"
-        ffprobe_raw = temp_root / "ffprobe"
+        ffmpeg_raw = temp_root / "ffmpeg.bin"
+        ffprobe_raw = temp_root / "ffprobe.bin"
         _gunzip_to(ffmpeg_gz, ffmpeg_raw)
         _gunzip_to(ffprobe_gz, ffprobe_raw)
-        installed_ffmpeg = destination / "ffmpeg"
-        installed_ffprobe = destination / "ffprobe"
         _install_binary(ffmpeg_raw, installed_ffmpeg)
         _install_binary(ffprobe_raw, installed_ffprobe)
     _verify_binary(installed_ffmpeg, "ffmpeg")
@@ -190,13 +242,25 @@ def download_ffmpeg(on_progress: ProgressCallback | None = None) -> Path:
     return installed_ffmpeg
 
 
-def _macos_asset_key() -> str | None:
-    if sys.platform != "darwin":
-        return None
+def _asset_key() -> str | None:
     machine = platform.machine().lower()
-    if machine in {"arm64", "aarch64"}:
+    if machine in {"aarch64"}:
+        machine = "arm64"
+    elif machine in {"amd64"}:
+        machine = "x86_64"
+    if sys.platform == "darwin" and machine in {"arm64", "x86_64"}:
+        return f"darwin-{machine}"
+    if sys.platform == "win32" and machine == "x86_64":
+        return "win32-x86_64"
+    return None
+
+
+def _macos_asset_key() -> str | None:
+    """Compatibility wrapper used by older tests."""
+    key = _asset_key()
+    if key == "darwin-arm64":
         return "arm64"
-    if machine in {"x86_64", "amd64"}:
+    if key == "darwin-x86_64":
         return "x86_64"
     return None
 
@@ -243,8 +307,7 @@ def _download_file(
     start, end = ratio_span
     temporary = destination.with_suffix(destination.suffix + ".partial")
     try:
-        request = urllib.request.Request(url, headers={"User-Agent": "DX-Band"})
-        with urllib.request.urlopen(request, timeout=180) as response:
+        with urlopen_with_mirrors(url, timeout=180) as response:
             total_header = response.headers.get("Content-Length")
             expected_size = int(total_header) if total_header and total_header.isdigit() else None
             hasher = hashlib.sha256()

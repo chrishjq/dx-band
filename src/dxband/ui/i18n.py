@@ -447,7 +447,18 @@ ENGLISH: dict[str, str] = {
     "使用默认渐变背景": "Use the default gradient background",
     "语言已切换": "Language changed",
     "创建歌曲模型": "Song Creation Models",
+    "创建所需资源": "Creation Resources",
     "按用途准备本机资源，不显示具体模型名称": "Prepare local resources by role; specific model names are hidden",
+    "一键下载并安装缺失的多媒体组件与模型，不显示具体模型名称": (
+        "Download and install missing multimedia tools and models in one click; "
+        "specific model names are hidden"
+    ),
+    "下载缺失资源": "Download Missing Resources",
+    "资源已就绪": "Resources Ready",
+    "所需资源已全部就绪": "All required resources are ready",
+    "缺失资源已全部就绪，可以继续创建歌曲": (
+        "All missing resources are ready; you can continue creating songs"
+    ),
     "运行组件": "Runtime Tools",
     "创建与导入歌曲所需的本机工具": "Local tools required for creating and importing songs",
     "转码与探测音频视频": "Transcode and probe audio/video",
@@ -455,11 +466,29 @@ ENGLISH: dict[str, str] = {
     "已下载到本机应用目录": "Downloaded into the app data folder",
     "已随安装包提供": "Included with the app package",
     "请先自行安装 FFmpeg 并确保可在终端调用": "Install FFmpeg yourself and make sure it is on PATH",
+    "请先自行安装并确保可在终端调用": "Install it yourself and make sure it is on PATH",
+    "创建与导入歌曲所需，可一键下载安装": (
+        "Required for creating and importing songs; download and install in one click"
+    ),
+    "已下载但未生效，可点击处理修复配置": (
+        "Downloaded but not active; click Fix to repair the configuration"
+    ),
+    "已下载但未生效，下载缺失资源时会自动修复": (
+        "Downloaded but not active; it will be repaired when downloading missing resources"
+    ),
     "不可用": "Unavailable",
+    "需修复": "Needs Repair",
+    "处理": "Fix",
+    "处理中…": "Fixing…",
+    "多媒体组件": "Multimedia Tools",
+    "多媒体组件已就绪": "Multimedia tools are ready",
     "FFmpeg 已就绪": "FFmpeg is ready",
     "正在下载 FFmpeg…": "Downloading FFmpeg…",
     "当前系统不支持应用内下载 FFmpeg，请先自行安装": (
         "In-app FFmpeg download is not supported on this system; install it yourself first"
+    ),
+    "当前系统暂不支持在应用内下载多媒体组件，请先自行安装": (
+        "In-app multimedia tool download is not supported on this system; install it yourself first"
     ),
     "未找到 FFmpeg。请到设置页下载到本机后重试。": (
         "FFmpeg was not found. Download it on the Settings page, then try again."
@@ -494,6 +523,23 @@ ENGLISH: dict[str, str] = {
     "已有资源正在下载，请稍候": "A download is already in progress; please wait",
     "无法识别要下载的资源": "Could not identify the resource to download",
     "下载失败，请稍后重试或检查网络": "Download failed; try again later or check the network",
+    "请稍后重试或检查网络": "Try again later or check the network",
+    "连接超时，请检查网络后重试": "Connection timed out; check the network and try again",
+    "无法解析下载地址，请检查网络或 DNS": "Could not resolve the download host; check the network or DNS",
+    "无法连接下载服务器": "Could not connect to the download server",
+    "无法连接下载服务器，请检查网络后重试": (
+        "Could not connect to the download server; check the network and try again"
+    ),
+    "无法连接模型下载服务，请检查网络或关闭本地代理后重试": (
+        "Could not reach the model download service; check the network or disable the local proxy, then try again"
+    ),
+    "本地代理不可用，请关闭代理后重试": (
+        "Local proxy unavailable; disable the proxy and try again"
+    ),
+    "安全连接失败，请检查系统时间或网络代理": (
+        "Secure connection failed; check system time or network proxy"
+    ),
+    "网络连接失败": "Network connection failed",
 }
 
 PREFIXES: tuple[tuple[str, str], ...] = (
@@ -527,6 +573,10 @@ PREFIXES: tuple[tuple[str, str], ...] = (
     ("重新分析全部失败：", "Reanalysis failed: "),
     ("重新分析节奏和 KEY 失败：", "Rhythm and key analysis failed: "),
     ("重新识别和弦失败：", "Chord recognition failed: "),
+    ("正在连接魔搭节点：", "Connecting to ModelScope: "),
+    ("魔搭下载未完成，改试镜像节点：", "ModelScope download incomplete; trying mirrors: "),
+    ("公共节点下载未完成，改试备用节点：", "Public download incomplete; trying backup mirror: "),
+    ("正在从备用节点下载", "Downloading from backup mirror: "),
     ("正在解码 ", "Decoding "),
     ("已导入歌曲：", "Imported song: "),
     ("已永久删除歌曲：", "Deleted song: "),
@@ -604,6 +654,54 @@ def english(text: str) -> str:
         return f"Lyric Review - {match.group(1)}"
     if match := re.fullmatch(r"修改和弦 · (.+)", text):
         return f"Edit Chords · {match.group(1)}"
+    if match := re.fullmatch(r"下载失败：(.*)", text):
+        return f"Download failed: {english(match.group(1))}"
+    if match := re.fullmatch(r"下载(.+)失败：(.*)", text):
+        return f"Failed to download {english(match.group(1))}: {english(match.group(2))}"
+    if match := re.fullmatch(r"服务器返回 HTTP (\d+)", text):
+        return f"Server returned HTTP {match.group(1)}"
+    if match := re.fullmatch(r"正在下载缺失资源（(\d+)/(\d+)）：(.+)…", text):
+        return (
+            f"Downloading missing resources ({match.group(1)}/{match.group(2)}): "
+            f"{english(match.group(3))}…"
+        )
+    if match := re.fullmatch(r"正在连接下载节点：(.+)", text):
+        return f"Connecting to download host: {english(match.group(1))}"
+    if match := re.fullmatch(r"正在(下载|修复)(.+)（(\d+)%）", text):
+        verb = "Downloading" if match.group(1) == "下载" else "Repairing"
+        return f"{verb} {english(match.group(2))} ({match.group(3)}%)"
+    if match := re.fullmatch(r"正在下载(.+)组件（(\d+)/(\d+)）", text):
+        return (
+            f"Downloading {english(match.group(1))} components "
+            f"({match.group(2)}/{match.group(3)})"
+        )
+    if match := re.fullmatch(r"正在下载(.+)（(\d+)/(\d+)）", text):
+        return (
+            f"Downloading {english(match.group(1))} "
+            f"({match.group(2)}/{match.group(3)})"
+        )
+    if match := re.fullmatch(r"正在(下载|修复|安装|校验)(.+)…", text):
+        verbs = {
+            "下载": "Downloading",
+            "修复": "Repairing",
+            "安装": "Installing",
+            "校验": "Verifying",
+        }
+        return f"{verbs[match.group(1)]} {english(match.group(2))}…"
+    if match := re.fullmatch(r"正在(下载|修复|安装|校验)(.+)", text):
+        verbs = {
+            "下载": "Downloading",
+            "修复": "Repairing",
+            "安装": "Installing",
+            "校验": "Verifying",
+        }
+        return f"{verbs[match.group(1)]} {english(match.group(2))}"
+    if match := re.fullmatch(r"正在下载(.+)…", text):
+        return f"Downloading {english(match.group(1))}…"
+    if match := re.fullmatch(r"正在下载(.+)", text):
+        return f"Downloading {english(match.group(1))}"
+    if match := re.fullmatch(r"(.+)已就绪，可以继续创建歌曲", text):
+        return f"{english(match.group(1))} is ready; you can continue creating songs"
     for pattern, replacement in PATTERNS:
         if pattern.fullmatch(text):
             return pattern.sub(replacement, text)

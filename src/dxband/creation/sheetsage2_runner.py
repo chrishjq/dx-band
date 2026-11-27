@@ -12,7 +12,11 @@ import time
 from pathlib import Path
 
 from dxband.creation.cancellation import CancellationToken
-from dxband.creation.model_download import huggingface_home, sheetsage2_model_dir
+from dxband.creation.model_download import (
+    huggingface_home,
+    mert_model_dir,
+    sheetsage2_model_dir,
+)
 from dxband.services.application_paths import default_application_data_root
 from dxband.services.bundle_paths import helper_script
 from dxband.services.ffmpeg_tools import resolve_ffmpeg
@@ -132,9 +136,13 @@ class SheetSage2Runner:
         environment["HF_HOME"] = str(external_home)
         environment["HF_HUB_CACHE"] = str(external_home / "hub")
         environment["HF_HUB_OFFLINE"] = "1"
+        args = [str(wav), str(output), "--model", str(self.model), "--device", "auto"]
+        mert_root = mert_model_dir()
+        if (mert_root / "config.json").is_file():
+            args.extend(["--base-model", str(mert_root)])
         command = python_script_command(
             script,
-            [str(wav), str(output), "--model", str(self.model), "--device", "auto"],
+            args,
             python=self.python,
         )
         self._run_process(

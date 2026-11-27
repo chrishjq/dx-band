@@ -13,7 +13,9 @@ uv sync --extra ai --extra packaging
 
 $Version = uv run --no-sync python -c "import tomllib; from pathlib import Path; print(tomllib.loads(Path('pyproject.toml').read_text(encoding='utf-8'))['project']['version'])"
 $BuildInfo = Join-Path $Root "src\dxband\_build_info.json"
-Set-Content -Path $BuildInfo -Value ("{`"version`":`"$Version`",`"platform`":`"windows-x64`"}") -Encoding utf8
+# PowerShell 5.1's Set-Content -Encoding utf8 writes a BOM; PyInstaller rejects it.
+$BuildInfoJson = "{`"version`":`"$Version`",`"platform`":`"windows-x64`"}"
+[System.IO.File]::WriteAllText($BuildInfo, $BuildInfoJson, (New-Object System.Text.UTF8Encoding $false))
 
 $DistDir = Join-Path $Root "dist"
 $AppDirName = "DX Band"

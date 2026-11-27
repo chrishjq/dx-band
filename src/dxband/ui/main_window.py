@@ -1,6 +1,7 @@
 # SPDX-FileCopyrightText: 2026 DX Band
 # SPDX-License-Identifier: GPL-3.0-only
 
+import logging
 import queue
 import threading
 from dataclasses import replace
@@ -30,13 +31,19 @@ from PySide6.QtWidgets import (
 from dxband import __version__
 from dxband.audio.output_device import AudioOutputDevice, list_output_devices
 from dxband.creation.model_download import (
+    MODEL_ROLES,
     download_missing_model,
+    format_download_error,
     list_model_role_status,
     model_role,
 )
 from dxband.creation.package_validator import SongPackage
 from dxband.resource_paths import CONTROL_ICON_ROOT
-from dxband.services.ffmpeg_tools import download_ffmpeg, ffmpeg_status
+from dxband.services.ffmpeg_tools import (
+    FFMPEG_LABEL,
+    ensure_ffmpeg_ready,
+    ffmpeg_status,
+)
 from dxband.services.library_service import LibraryService
 from dxband.services.playlist_service import PlaylistService
 from dxband.ui.branding import APP_WINDOW_TITLE, application_icon, sidebar_logo
@@ -61,6 +68,7 @@ from dxband.ui.services.settings_service import (
 )
 
 NAVIGATION_ICON_DIR = CONTROL_ICON_ROOT
+LOGGER = logging.getLogger(__name__)
 
 
 class MainWindow(QMainWindow):
@@ -251,11 +259,13 @@ class MainWindow(QMainWindow):
             self._background_video_settings_changed
         )
         self.settings_page.refresh_output_devices_requested.connect(self._refresh_output_devices)
-        self.settings_page.model_download_requested.connect(self._download_model)
-        self.settings_page.ffmpeg_download_requested.connect(self._download_ffmpeg)
+        self.settings_page.missing_resources_download_requested.connect(
+            self._download_missing_resources
+        )
         self._model_download_messages: queue.SimpleQueue[tuple[str, Any]] = queue.SimpleQueue()
         self._model_download_thread: threading.Thread | None = None
         self._model_download_key: str | None = None
+        self._model_download_queue: list[str] = []
         self._model_download_timer = QTimer(self)
         self._model_download_timer.setInterval(100)
         self._model_download_timer.timeout.connect(self._drain_model_download_messages)
@@ -366,83 +376,95 @@ class MainWindow(QMainWindow):
 
     def _refresh_model_statuses(self) -> None:
         busy_key = self._model_download_key
+        ffmpeg = ffmpeg_status()
+        model_statuses = list_model_role_status()
+        has_missing = (not ffmpeg.ready) or any(not item.ready for item in model_statuses)
         self.settings_page.set_ffmpeg_status(
-            ffmpeg_status(),
+            ffmpeg,
             busy=busy_key == "ffmpeg",
             blocked=busy_key is not None and busy_key != "ffmpeg",
         )
         self.settings_page.set_model_statuses(
-            list_model_role_status(),
-            busy_key=busy_key,
+            model_statuses,
+            busy_key=busy_key if busy_key != "ffmpeg" else None,
+            has_missing=has_missing,
         )
+        if busy_key is not None:
+            self.settings_page.set_resources_download_busy(True)
 
-    def _download_ffmpeg(self) -> None:
+    def _missing_resource_keys(self) -> list[str]:
+        keys: list[str] = []
+        if not ffmpeg_status().ready:
+            keys.append("ffmpeg")
+        ready_by_key = {item.key: item.ready for item in list_model_role_status()}
+        for role in MODEL_ROLES:
+            if not ready_by_key.get(role.key, False):
+                keys.append(role.key)
+        return keys
+
+    def _download_missing_resources(self) -> None:
         if self._model_download_thread is not None and self._model_download_thread.is_alive():
             self.settings_page.show_status("已有资源正在下载，请稍候", trusted=True)
             return
-        status = ffmpeg_status()
-        if status.ready:
-            self.settings_page.show_status("FFmpeg 已就绪", trusted=True)
+        missing = self._missing_resource_keys()
+        if not missing:
+            self.settings_page.show_status("所需资源已全部就绪", trusted=True)
             self._refresh_model_statuses()
             return
-        if not status.download_supported:
-            self.settings_page.show_status(
-                "当前系统不支持应用内下载 FFmpeg，请先自行安装",
-                trusted=True,
-            )
-            return
-        self._model_download_key = "ffmpeg"
+        self._model_download_queue = missing
+        self._model_download_key = missing[0]
         self._refresh_model_statuses()
-        self.settings_page.show_status("正在下载 FFmpeg…", trusted=True)
+        self.settings_page.set_download_progress(-1.0)
+        label = self._resource_label(missing[0])
+        self.settings_page.show_status(
+            f"正在下载缺失资源（1/{len(missing)}）：{label}…",
+            trusted=True,
+        )
         self._model_download_thread = threading.Thread(
-            target=self._download_ffmpeg_in_background,
-            name="ffmpeg-download",
+            target=self._download_missing_resources_in_background,
+            args=(list(missing),),
+            name="missing-resources-download",
             daemon=True,
         )
         self._model_download_thread.start()
 
-    def _download_ffmpeg_in_background(self) -> None:
+    def _resource_label(self, key: str) -> str:
+        if key == "ffmpeg":
+            return FFMPEG_LABEL
         try:
-            download_ffmpeg(
-                on_progress=lambda stage, ratio: self._model_download_messages.put(
-                    ("progress", (stage, ratio))
-                ),
-            )
-            self._model_download_messages.put(("completed", "ffmpeg"))
-        except Exception as exc:
-            self._model_download_messages.put(("failed", str(exc)))
-
-    def _download_model(self, key: str) -> None:
-        if self._model_download_thread is not None and self._model_download_thread.is_alive():
-            self.settings_page.show_status("已有资源正在下载，请稍候", trusted=True)
-            return
-        try:
-            role = model_role(key)
+            return model_role(key).label
         except ValueError:
-            self.settings_page.show_status("无法识别要下载的资源", trusted=True)
-            return
-        self._model_download_key = key
-        self._refresh_model_statuses()
-        self.settings_page.show_status(f"正在下载{role.label}…", trusted=True)
-        self._model_download_thread = threading.Thread(
-            target=self._download_model_in_background,
-            args=(key,),
-            name=f"model-download-{key}",
-            daemon=True,
-        )
-        self._model_download_thread.start()
+            return "创建资源"
 
-    def _download_model_in_background(self, key: str) -> None:
+    def _download_missing_resources_in_background(self, keys: list[str]) -> None:
+        total = len(keys)
         try:
-            download_missing_model(
-                key,
-                on_progress=lambda stage, ratio: self._model_download_messages.put(
-                    ("progress", (stage, ratio))
-                ),
-            )
-            self._model_download_messages.put(("completed", key))
+            for index, key in enumerate(keys):
+                self._model_download_messages.put(("started", (key, index, total)))
+
+                def on_progress(
+                    stage: str,
+                    ratio: float | None,
+                    *,
+                    item_index: int = index,
+                    item_total: int = total,
+                ) -> None:
+                    overall: float | None
+                    if isinstance(ratio, float):
+                        overall = (item_index + max(0.0, min(1.0, ratio))) / item_total
+                    else:
+                        overall = item_index / item_total if item_total else None
+                    self._model_download_messages.put(("progress", (stage, overall, ratio)))
+
+                if key == "ffmpeg":
+                    ensure_ffmpeg_ready(on_progress=on_progress)
+                else:
+                    download_missing_model(key, on_progress=on_progress)
+                self._model_download_messages.put(("item_completed", key))
+            self._model_download_messages.put(("completed", "all"))
         except Exception as exc:
-            self._model_download_messages.put(("failed", str(exc)))
+            LOGGER.exception("Missing resource download failed")
+            self._model_download_messages.put(("failed", format_download_error(exc)))
 
     def _drain_model_download_messages(self) -> None:
         while True:
@@ -450,28 +472,53 @@ class MainWindow(QMainWindow):
                 event, payload = self._model_download_messages.get_nowait()
             except queue.Empty:
                 return
-            if event == "progress" and isinstance(payload, tuple):
-                stage, ratio = payload
-                message = str(stage)
-                if isinstance(ratio, float):
-                    message = f"{message}（{round(ratio * 100)}%）"
-                self.settings_page.show_status(message, trusted=True)
-            elif event == "completed":
-                key = str(payload)
+            if event == "started" and isinstance(payload, tuple):
+                key, index, total = payload
+                self._model_download_key = str(key)
+                self._refresh_model_statuses()
+                label = self._resource_label(str(key))
+                self.settings_page.set_download_progress(-1.0)
+                self.settings_page.show_status(
+                    f"正在下载缺失资源（{int(index) + 1}/{int(total)}）：{label}…",
+                    trusted=True,
+                )
+            elif event == "progress" and isinstance(payload, tuple):
+                stage = str(payload[0])
+                overall = payload[1] if len(payload) > 1 else None
+                item_ratio = payload[2] if len(payload) > 2 else None
+                # Progress bar owns the percentage; status text only shows the stage.
+                if isinstance(overall, float):
+                    self.settings_page.set_download_progress(overall)
+                elif isinstance(item_ratio, float):
+                    self.settings_page.set_download_progress(item_ratio)
+                else:
+                    self.settings_page.set_download_progress(-1.0)
+                self.settings_page.update_busy_download_progress(
+                    item_ratio if isinstance(item_ratio, float) else None
+                )
+                self.settings_page.show_status(stage, trusted=True)
+            elif event == "item_completed":
                 self._model_download_key = None
                 self._refresh_model_statuses()
-                if key == "ffmpeg":
-                    label = "FFmpeg"
-                else:
-                    try:
-                        label = model_role(key).label
-                    except ValueError:
-                        label = "创建资源"
-                self.settings_page.show_status(f"{label}已就绪，可以继续创建歌曲", trusted=True)
+            elif event == "completed":
+                self._model_download_key = None
+                self._model_download_queue = []
+                self._refresh_model_statuses()
+                self.settings_page.show_status(
+                    "缺失资源已全部就绪，可以继续创建歌曲",
+                    trusted=True,
+                )
             elif event == "failed":
                 self._model_download_key = None
+                self._model_download_queue = []
                 self._refresh_model_statuses()
-                self.settings_page.show_status("下载失败，请稍后重试或检查网络", trusted=True)
+                detail = str(payload).strip() or "请稍后重试或检查网络"
+                message = (
+                    detail
+                    if detail.startswith(("下载", "缺少"))
+                    else f"下载失败：{detail}"
+                )
+                self.settings_page.show_status(message, trusted=True)
 
     def _navigation_index(self, page: QWidget) -> int:
         return self._navigation_pages.index(page)

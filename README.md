@@ -51,9 +51,7 @@ Download builds from [GitHub Releases](https://github.com/chrishjq/dx-band/relea
 - **macOS (Apple Silicon):** `DX-Band-*-macos-arm64.dmg` — open it and drag **DX Band** into Applications
 - **Windows (x64):** `DX-Band-*-windows-x64.zip` — unzip and run `DX Band.exe`
 
-Installers do not include AI model weights; before creating songs, open **Settings** in the app and download the models you need by role.
-
-If FFmpeg/ffprobe is missing: on macOS, download it from **Settings → Runtime Tools** or install it yourself (for example `brew install ffmpeg`); on Windows, install FFmpeg and make sure it is available on PATH. Unsigned macOS builds may require Open Anyway under System Settings → Privacy & Security on first launch.
+Installers do not include AI model weights; before creating songs, open **Settings → Creation Resources** and click **Download Missing Resources** to install multimedia tools and required models automatically. In-app downloads prefer mainland-reachable mirrors (such as the Hugging Face China mirror and GitHub proxies), then fall back to official hosts. Unsigned macOS builds may require Open Anyway under System Settings → Privacy & Security on first launch.
 
 ## Run from source
 
