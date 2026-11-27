@@ -44,13 +44,16 @@ These are actual screen images featured on the project website.
 
 ![DX Band musician screen](docs/assets/dx-band-musician-screen.png)
 
-## Installer (macOS Apple Silicon)
+## Installers
 
-Download `DX-Band-*-macos-arm64.dmg` from GitHub Releases, open it, and drag **DX Band** into Applications. The installer does not include AI model weights; before creating songs, open **Settings** in the app and download the models you need by role.
+Download builds from [GitHub Releases](https://github.com/chrishjq/dx-band/releases):
 
-If FFmpeg/ffprobe is missing, download it from **Settings → Runtime Tools** in the app, or install it yourself (for example `brew install ffmpeg`). Unsigned builds may require Open Anyway under System Settings → Privacy & Security on first launch.
+- **macOS (Apple Silicon):** `DX-Band-*-macos-arm64.dmg` — open it and drag **DX Band** into Applications
+- **Windows (x64):** `DX-Band-*-windows-x64.zip` — unzip and run `DX Band.exe`
 
-Maintainers can run `./scripts/build_macos_release.sh` from the repository root to produce the `.dmg`. Pushing a `v*` tag triggers GitHub Actions to build and upload only that `.dmg` to the Release.
+Installers do not include AI model weights; before creating songs, open **Settings** in the app and download the models you need by role.
+
+If FFmpeg/ffprobe is missing: on macOS, download it from **Settings → Runtime Tools** or install it yourself (for example `brew install ffmpeg`); on Windows, install FFmpeg and make sure it is available on PATH. Unsigned macOS builds may require Open Anyway under System Settings → Privacy & Security on first launch.
 
 ## Run from source
 

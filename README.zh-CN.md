@@ -44,13 +44,16 @@ DX Band 是在本机运行的歌曲制作与舞台播放程序。它支持六轨
 
 ![DX Band 乐手屏](docs/assets/dx-band-musician-screen.png)
 
-## 安装包（macOS Apple Silicon）
+## 安装包
 
-可从 GitHub Releases 下载 `DX-Band-*-macos-arm64.dmg`，打开后将 **DX Band** 拖入「应用程序」。安装包不含 AI 模型权重；首次创建歌曲前，请打开应用内「设置」，按用途下载所需模型。
+可从 [GitHub Releases](https://github.com/chrishjq/dx-band/releases) 下载：
 
-若本机还没有 FFmpeg/ffprobe，可在应用「设置 → 运行组件」中一键下载；也可自行安装（例如 `brew install ffmpeg`）。未签名的安装包首次打开时，可能需在「系统设置 → 隐私与安全性」中选择仍要打开。
+- **macOS（Apple Silicon）**：`DX-Band-*-macos-arm64.dmg`，打开后将 **DX Band** 拖入「应用程序」
+- **Windows（x64）**：`DX-Band-*-windows-x64.zip`，解压后运行 `DX Band.exe`
 
-维护者可在仓库根目录执行 `./scripts/build_macos_release.sh` 本地打出 `.dmg`。推送 `v*` 标签时，GitHub Actions 会自动构建并只上传该 `.dmg` 到 Release。
+安装包不含 AI 模型权重；首次创建歌曲前，请打开应用内「设置」，按用途下载所需模型。
+
+若本机还没有 FFmpeg/ffprobe：macOS 可在「设置 → 运行组件」中一键下载，或自行安装（例如 `brew install ffmpeg`）；Windows 请自行安装 FFmpeg 并确保可在命令行调用。未签名的 macOS 安装包首次打开时，可能需在「系统设置 → 隐私与安全性」中选择仍要打开。
 
 ## 本机运行（源码）
 
