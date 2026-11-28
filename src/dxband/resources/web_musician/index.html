@@ -959,8 +959,8 @@
         if (pdfExporting) return 4;
         if (window.innerWidth < 700 || window.innerHeight < 600) return 1;
         const usableWidth = liveScoreWidth();
-        // 700–1279px 先落到一行两小节，避免从四小节直接跳到一小节。
-        const widthLimit = window.innerWidth >= 1280 && usableWidth >= 4 * 145 * fontScale ? 4
+        // 按可用宽度与字号优先一行四小节；挤不下再落到两小节、一小节（含 iPad 等 700–1279px 宽屏）。
+        const widthLimit = usableWidth >= 4 * 145 * fontScale ? 4
           : usableWidth >= 2 * 145 * fontScale ? 2 : 1;
         if (!state.song || widthLimit === 1) return widthLimit;
         const lyricSize = liveLyricBaseSize();

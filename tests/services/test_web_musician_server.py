@@ -3,6 +3,7 @@
 
 import http.client
 import json
+import socket
 from http.server import BaseHTTPRequestHandler
 from pathlib import Path
 
@@ -13,7 +14,55 @@ from dxband.resource_paths import WEB_MUSICIAN_ROOT
 from dxband.services.web_musician_server import (
     WebMusicianServer,
     _RequestHandler,
+    _preferred_lan_address,
 )
+
+
+def test_preferred_lan_address_prefers_udp_probe_over_vpn_hostname_address(
+    monkeypatch: MonkeyPatch,
+) -> None:
+    """Hostname order + string sort used to pick Wintun 172.* over Wi-Fi."""
+
+    class FakeProbe:
+        def connect(self, _endpoint: object) -> None:
+            return None
+
+        def getsockname(self) -> tuple[str, int]:
+            return ("192.168.0.123", 0)
+
+        def close(self) -> None:
+            return None
+
+    monkeypatch.setattr(socket, "gethostname", lambda: "shadow")
+    monkeypatch.setattr(
+        socket,
+        "gethostbyname_ex",
+        lambda _hostname: ("shadow", [], ["172.30.216.223", "192.168.0.123"]),
+    )
+    monkeypatch.setattr(socket, "socket", lambda *_args, **_kwargs: FakeProbe())
+
+    assert _preferred_lan_address() == "192.168.0.123"
+
+
+def test_preferred_lan_address_falls_back_to_rfc1918_when_probe_fails(
+    monkeypatch: MonkeyPatch,
+) -> None:
+    class FailingProbe:
+        def connect(self, _endpoint: object) -> None:
+            raise OSError("offline")
+
+        def close(self) -> None:
+            return None
+
+    monkeypatch.setattr(socket, "gethostname", lambda: "shadow")
+    monkeypatch.setattr(
+        socket,
+        "gethostbyname_ex",
+        lambda _hostname: ("shadow", [], ["10.0.0.5", "127.0.0.1"]),
+    )
+    monkeypatch.setattr(socket, "socket", lambda *_args, **_kwargs: FailingProbe())
+
+    assert _preferred_lan_address() == "10.0.0.5"
 
 
 @pytest.mark.parametrize(
@@ -193,7 +242,8 @@ def test_web_musician_page_omits_beat_lights_without_losing_score() -> None:
     assert "addEventListener('scroll', updateScrollRail" not in page
     assert "if (now - lastAnimationAt < 33) return" in page
     assert "if (window.innerWidth < 700 || window.innerHeight < 600) return 1;" in page
-    assert "window.innerWidth >= 1280 && usableWidth >= 4 * 145 * fontScale ? 4" in page
+    assert "usableWidth >= 4 * 145 * fontScale ? 4" in page
+    assert "window.innerWidth >= 1280 && usableWidth >= 4 * 145 * fontScale ? 4" not in page
     assert "bars.length === barsPerRow" in page
     assert "Math.min(barsPerRow, 2)" not in page
     assert "beats: bars.flatMap((bar) => bar.beats)" in page

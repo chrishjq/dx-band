@@ -309,17 +309,27 @@ def _encode_event(event_name: str, value: object) -> bytes:
 
 
 def _preferred_lan_address() -> str:
-    """Resolve the address the OS would use on the current local network."""
+    """Resolve the address the OS would use on the current local network.
+
+    Hostname lookup can return every adapter address, including VPN/tunnel
+    interfaces such as Wintun ``172.16–31.*``. Prefer the UDP route probe:
+    it reflects the outbound interface the OS would actually use, which is
+    what phones on the same Wi-Fi can usually reach.
+    """
     candidates: list[str] = []
     hostnames = (socket.gethostname(), f"{socket.gethostname().split('.')[0]}.local")
     for hostname in hostnames:
         with suppress(OSError):
             candidates.extend(socket.gethostbyname_ex(hostname)[2])
+
+    probed: str | None = None
     probe = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     try:
+        # 192.0.2.0/24 is TEST-NET-1; connect() does not send packets.
         probe.connect(("192.0.2.1", 9))
         address = str(probe.getsockname()[0])
         if address:
+            probed = address
             candidates.append(address)
     except OSError:
         pass
@@ -333,6 +343,9 @@ def _preferred_lan_address() -> str:
             return (9, value)
         if parsed.is_loopback:
             return (8, value)
+        # Outbound route wins over alphabetical ties among RFC1918 ranges.
+        if probed is not None and value == probed:
+            return (-1, value)
         if value.startswith("192.168.") or value.startswith("10."):
             return (0, value)
         first, second, *_rest = (int(part) for part in value.split("."))
